@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-**Geas** es un gestor de descargas multiplataforma inspirado en Internet Download Manager (IDM), con una interfaz gráfica moderna construida con PyQt5 y una extensión de Chrome integrada para detectar y descargar archivos multimedia automáticamente.
+**Geas** es un gestor de descargas multiplataforma inspirado en Internet Download Manager (IDM), con una interfaz gráfica moderna construida con PySide6 (Qt 6) y una extensión de Chrome integrada para detectar y descargar archivos multimedia automáticamente.
 
 ## Características
 
@@ -343,7 +343,7 @@ Este proyecto está licenciado bajo la Licencia MIT. Ver el archivo `LICENSE` pa
 
 ## Reconocimientos
 
-- [PyQt5](https://www.riverbankcomputing.com/software/pyqt/) - Framework GUI
+- [PySide6](https://doc.qt.io/qtforpython-6/) - Framework GUI (Qt for Python, LGPL)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Descarga de videos
 - [Flask](https://flask.palletsprojects.com/) - Framework web
 - [requests](https://requests.readthedocs.io/) - Cliente HTTP

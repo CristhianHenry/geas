@@ -1,13 +1,13 @@
 import os
 from urllib.parse import urlparse
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QLineEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QProgressBar,
     QGroupBox, QCheckBox, QFileDialog, QAbstractItemView
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QPixmap
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QPixmap
 import requests
 
 import icons
@@ -24,8 +24,8 @@ def safe_title(title):
 
 class MediaInfoThread(QThread):
     """Hilo para obtener información del medio sin congelar la UI"""
-    info_ready = pyqtSignal(object)
-    error_occurred = pyqtSignal(str)
+    info_ready = Signal(object)
+    error_occurred = Signal(str)
 
     def __init__(self, url, context=None, prefer_stream=False):
         super().__init__()

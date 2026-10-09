@@ -1,11 +1,11 @@
 import sys
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, 
     QProgressBar, QLabel, QMessageBox
 )
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineProfile
-from PyQt5.QtWebEngineCore import QWebEngineUrlRequestInterceptor
-from PyQt5.QtCore import QUrl, pyqtSignal, Qt
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineUrlRequestInterceptor
+from PySide6.QtCore import QUrl, Signal, Qt
 
 class NetworkInterceptor(QWebEngineUrlRequestInterceptor):
     """Intercepta peticiones de red para detectar medios y bloquear anuncios"""
@@ -50,7 +50,7 @@ class NetworkInterceptor(QWebEngineUrlRequestInterceptor):
                 return
 
 class BrowserTab(QWidget):
-    video_detected = pyqtSignal(str) # url
+    video_detected = Signal(str) # url
 
     def __init__(self):
         super().__init__()

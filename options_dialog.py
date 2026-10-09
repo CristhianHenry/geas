@@ -1,11 +1,11 @@
 # options_dialog.py - Opciones de Geas (pestañas como en IDM)
 import os
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QCheckBox,
     QSpinBox, QLineEdit, QPushButton, QLabel, QFileDialog, QMessageBox, QDialogButtonBox
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 import icons
 import ytdlp_updater

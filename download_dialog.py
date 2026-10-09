@@ -3,13 +3,13 @@ import os
 import subprocess
 import sys
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QProgressBar,
     QTabWidget, QWidget, QCheckBox, QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QGroupBox, QAbstractItemView, QMessageBox
 )
-from PyQt5.QtCore import QTimer, Qt, QRectF
-from PyQt5.QtGui import QPainter, QColor, QLinearGradient
+from PySide6.QtCore import QTimer, Qt, QRectF
+from PySide6.QtGui import QPainter, QColor, QLinearGradient
 
 import icons
 from ui_format import format_size, format_speed, format_eta, format_percent, describe_status

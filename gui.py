@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QAbstractItemView, QToolBar, QAction, QMenu, QMessageBox, QDialog, QLabel,
+    QAbstractItemView, QToolBar, QMenu, QMessageBox, QDialog, QLabel,
     QSystemTrayIcon, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
-from PyQt5.QtCore import QTimer, QObject, pyqtSignal, Qt, QSize, QRect, QProcess
-from PyQt5.QtGui import QColor, QLinearGradient, QKeySequence, QBrush, QPalette
+from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess
+from PySide6.QtGui import QAction, QColor, QLinearGradient, QKeySequence, QBrush, QPalette
 
 import icons
 import ytdlp_updater
@@ -59,7 +59,7 @@ ACTIVE_STATES = ("descargando", "obteniendo información", "esperando")
 
 class ServerBridge(QObject):
     """API local en un hilo aparte; cada solicitud del navegador llega a la interfaz como señal."""
-    download_requested = pyqtSignal(object)  # dict enviado por la extensión
+    download_requested = Signal(object)  # dict enviado por la extensión
 
     def __init__(self, manager):
         super().__init__()
@@ -548,7 +548,7 @@ class DownloadApp(QMainWindow):
             menu.addActions([self.act_copy_url, self.act_delete])
         else:
             menu.addActions([self.act_add, self.act_paste])
-        menu.exec_(self.list.viewport().mapToGlobal(position))
+        menu.exec(self.list.viewport().mapToGlobal(position))
 
     def on_item_double_clicked(self, item, column):
         entry_id = item.data(COL_NAME, ID_ROLE)
@@ -574,7 +574,7 @@ class DownloadApp(QMainWindow):
 
     def add_url(self):
         dialog = AddUrlDialog(self)
-        if dialog.exec_() == QDialog.Accepted and dialog.url():
+        if dialog.exec() == QDialog.Accepted and dialog.url():
             self.process_new_url(dialog.url())
 
     def paste_and_analyze(self):
@@ -645,7 +645,7 @@ class DownloadApp(QMainWindow):
         if not ids:
             return
         dialog = DeleteDialog(len(ids), self)
-        if dialog.exec_() != QDialog.Accepted:
+        if dialog.exec() != QDialog.Accepted:
             return
         delete_files = dialog.delete_files.isChecked()
         for entry_id in ids:
@@ -752,7 +752,7 @@ class DownloadApp(QMainWindow):
 
     def show_options(self):
         dialog = OptionsDialog(self.app_settings, self, update_ytdlp=self.show_ytdlp_updater)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
             self._update_ffmpeg_label()
             self.log_message("Opciones actualizadas")
@@ -877,7 +877,7 @@ class DownloadApp(QMainWindow):
             if not (clipboard_text.startswith(('http://', 'https://')) or 'www.' in clipboard_text):
                 clipboard_text = ""
             dialog = SmartDownloadDialog(self.manager, self, clipboard_text)
-            if dialog.exec_() == dialog.Accepted:
+            if dialog.exec() == QDialog.Accepted:
                 self.log_message("Detector inteligente completado")
                 self.refresh_list()
         except Exception as e:
@@ -914,7 +914,7 @@ class DownloadApp(QMainWindow):
                                         convert_note=bool(convert and find_ffmpeg()))
             if from_browser:
                 self.bring_to_front(dialog)
-            if dialog.exec_() == QDialog.Accepted:
+            if dialog.exec() == QDialog.Accepted:
                 info = dialog.get_download_info()
                 # Descargar con las cookies/cabeceras con las que se analizó
                 task_id = self.manager.add_yt_download(info['url'], info['save_path'], info['format_id'],
@@ -1004,7 +1004,7 @@ class DownloadApp(QMainWindow):
         if ask or not self.app_settings.get("auto_start_downloads", True):
             dialog = FileInfoDialog(url, save_path, size, self)
             self.bring_to_front(dialog)
-            if dialog.exec_() != QDialog.Accepted:
+            if dialog.exec() != QDialog.Accepted:
                 return
             save_path, start = dialog.save_path(), dialog.start_now
 
@@ -1116,13 +1116,13 @@ class DownloadApp(QMainWindow):
     def toggle_clipboard_monitor(self, enabled):
         """Activar/Desactivar monitor de portapapeles"""
         clipboard = QApplication.clipboard()
-        try:
+        if getattr(self, "_clipboard_connected", False):
             clipboard.dataChanged.disconnect(self.on_clipboard_change)
-        except TypeError:
-            pass  # no estaba conectado
+            self._clipboard_connected = False
         if enabled:
             self._last_clipboard_text = clipboard.text().strip()  # lo ya copiado no cuenta
             clipboard.dataChanged.connect(self.on_clipboard_change)
+            self._clipboard_connected = True
 
     def on_clipboard_change(self):
         """Enlace copiado: videos -> calidad; archivos (zip, exe, mp4...) -> información del archivo"""

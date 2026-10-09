@@ -2,11 +2,11 @@
 
 import os
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog
 )
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PySide6.QtCore import QThread, Signal, Qt
 
 import icons
 from enhanced_downloader import sanitize_filename, unique_path, url_probe
@@ -16,7 +16,7 @@ from ui_format import format_size
 
 class UrlProbeThread(QThread):
     """Consulta una URL (tipo, tamaño y nombre) sin congelar la interfaz"""
-    probed = pyqtSignal(object)  # dict de url_probe()
+    probed = Signal(object)  # dict de url_probe()
 
     def __init__(self, url, headers=None, cookies=None):
         super().__init__()

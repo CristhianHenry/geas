@@ -1,8 +1,8 @@
 # ytdlp_dialog.py - "Actualizar yt-dlp": versión instalada, última publicada y actualización
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QProgressBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PySide6.QtCore import Qt, QThread, Signal
 
 import icons
 import ytdlp_updater
@@ -10,7 +10,7 @@ import ytdlp_updater
 
 class VersionCheckThread(QThread):
     """Consulta la última versión publicada sin bloquear la interfaz."""
-    checked = pyqtSignal(str, str)  # (última versión, error)
+    checked = Signal(str, str)  # (última versión, error)
 
     def run(self):
         try:
@@ -20,7 +20,7 @@ class VersionCheckThread(QThread):
 
 
 class UpdateThread(QThread):
-    done = pyqtSignal(bool, str)  # (correcto, salida de pip)
+    done = Signal(bool, str)  # (correcto, salida de pip)
 
     def run(self):
         self.done.emit(*ytdlp_updater.run_update())
@@ -28,9 +28,9 @@ class UpdateThread(QThread):
 
 class YtDlpUpdateDialog(QDialog):
     """Ventana propia (no modal, como el Programador): puede cerrarse mientras se actualiza."""
-    restart_requested = pyqtSignal()
-    updated = pyqtSignal(str)  # versión nueva instalada
-    log = pyqtSignal(str)
+    restart_requested = Signal()
+    updated = Signal(str)  # versión nueva instalada
+    log = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)

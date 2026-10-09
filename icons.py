@@ -1,9 +1,9 @@
 # icons.py - Iconos de la interfaz (SVG dibujados en código; el de la app, desde branding/)
 import os
 
-from PyQt5.QtCore import QByteArray, Qt
-from PyQt5.QtGui import QIcon, QPainter, QPixmap
-from PyQt5.QtSvg import QSvgRenderer
+from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 
 _BLUE_GRADIENT = ('<linearGradient id="g" x1="0" y1="0" x2="0" y2="1">'
                   '<stop offset="0" stop-color="#4aa3f5"/><stop offset="1" stop-color="#1c64c2"/></linearGradient>')

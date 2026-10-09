@@ -1,13 +1,13 @@
 # smart_download_dialog.py - Diálogo Inteligente de Descarga
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QProgressBar, QTextEdit, QTabWidget, QWidget,
     QSpinBox, QCheckBox, QGroupBox, QSplitter, QApplication
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtGui import QFont, QIcon, QPixmap
 import sys
 import os
 from url_detector import UniversalDownloadDetector
@@ -17,9 +17,9 @@ import time
 
 class UrlAnalysisThread(QThread):
     """Hilo para analizar URLs sin bloquear la UI"""
-    analysis_complete = pyqtSignal(list)  # Lista de archivos encontrados
-    analysis_error = pyqtSignal(str)      # Error en el análisis
-    progress_update = pyqtSignal(str)     # Actualización de progreso
+    analysis_complete = Signal(list)  # Lista de archivos encontrados
+    analysis_error = Signal(str)      # Error en el análisis
+    progress_update = Signal(str)     # Actualización de progreso
     
     def __init__(self, url_text):
         super().__init__()
@@ -437,4 +437,4 @@ if __name__ == "__main__":
     
     dialog = SmartDownloadDialog(MockManager())
     dialog.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

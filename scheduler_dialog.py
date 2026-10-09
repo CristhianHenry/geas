@@ -2,12 +2,12 @@
 import os
 from datetime import datetime
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit, QPushButton,
     QDateTimeEdit, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog,
     QGroupBox, QAbstractItemView
 )
-from PyQt5.QtCore import Qt, QTimer, QDateTime
+from PySide6.QtCore import Qt, QTimer, QDateTime
 
 import icons
 from enhanced_downloader import filename_from_url
@@ -93,7 +93,7 @@ class SchedulerDialog(QDialog):
     def schedule(self):
         url = self.url_input.text().strip()
         path = self.path_input.text().strip()
-        start_time = self.time_input.dateTime().toPyDateTime()
+        start_time = self.time_input.dateTime().toPython()
         if not self.is_valid_url(url):
             QMessageBox.warning(self, "Programador", "La URL no es válida.")
             return

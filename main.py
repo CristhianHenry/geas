@@ -6,8 +6,8 @@ import sys
 # aunque lo inicie el navegador o un acceso directo desde otra carpeta
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTranslator, QLibraryInfo
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTranslator, QLibraryInfo
 from gui import DownloadApp
 
 
@@ -38,8 +38,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # Botones y diálogos estándar de Qt en español ("Sí", "No", "Supr", selector de archivos...)
     translator = QTranslator()
-    if translator.load("qtbase_es", QLibraryInfo.location(QLibraryInfo.TranslationsPath)):
+    if translator.load("qtbase_es", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
         app.installTranslator(translator)
     window = DownloadApp()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

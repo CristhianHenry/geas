@@ -1,11 +1,11 @@
 # simple_dialogs.py - Diálogos pequeños: añadir URL, eliminar descargas y registro
 from datetime import datetime
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox,
     QPlainTextEdit, QFileDialog, QMessageBox, QApplication
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 import icons
 
