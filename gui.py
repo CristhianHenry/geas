@@ -27,6 +27,7 @@ from smart_download_dialog import SmartDownloadDialog
 from video_quality_dialog import VideoQualityDialog
 from file_info_dialog import FileInfoDialog, UrlProbeThread
 from options_dialog import OptionsDialog
+from refresh_dialog import RefreshAddressDialog
 from scheduler_dialog import SchedulerDialog
 from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow, CountdownDialog
 from browser_tab import BrowserTab
@@ -139,6 +140,7 @@ class DownloadApp(QMainWindow):
         self._force_quit = False
         self._restarting = False
         self.browser_window = None
+        self.address_dialog = None    # "Actualizar dirección" abierto: recibe el próximo enlace del navegador
         self.scheduler_dialog = None
         self.ytdlp_dialog = None
         self.ytdlp_restart_pending = False  # yt-dlp se actualizó: falta reiniciar
@@ -236,6 +238,8 @@ class DownloadApp(QMainWindow):
         self.act_open_folder = self._action("folder", "Abrir carpeta", self.open_selected_folder)
         self.act_progress = self._action("progress", "Mostrar progreso", self.show_selected_progress)
         self.act_redownload = self._action("redownload", "Descargar de nuevo", self.redownload_selected)
+        self.act_refresh_address = self._action(None, "Actualizar dirección de descarga…", self.refresh_address_selected,
+                                                tip="Enlace nuevo para seguir una descarga cuyo enlace venció")
         self.act_copy_url = self._action("copy", "Copiar URL", self.copy_selected_url)
         self.act_paste = self._action(None, "Pegar URL y descargar", self.paste_and_analyze, "Ctrl+V")
         self.act_quit = self._action(None, "Salir", self.force_quit, "Ctrl+Q")
@@ -261,7 +265,7 @@ class DownloadApp(QMainWindow):
         files = bar.addMenu("&Archivo")
         files.addActions([self.act_open, self.act_open_folder, self.act_progress])
         files.addSeparator()
-        files.addActions([self.act_redownload, self.act_copy_url])
+        files.addActions([self.act_redownload, self.act_refresh_address, self.act_copy_url])
         files.addSeparator()
         files.addAction(self.act_delete)
 
@@ -597,13 +601,21 @@ class DownloadApp(QMainWindow):
         self.act_resume.setEnabled(any(s in resumable or s.startswith(("error", "cancelado")) for s in statuses))
         self.act_stop.setEnabled(any(s in STOPPABLE_STATES or s.startswith("convirtiendo") for s in statuses))
         self.act_progress.setEnabled(any(i in self.manager.tasks for i in ids))
+        self.act_refresh_address.setEnabled(len(ids) == 1 and self._can_refresh_address(ids[0], statuses[0]))
+
+    def _can_refresh_address(self, entry_id, status):
+        """Descargas directas sin terminar que no están bajando ahora (en pausa, interrumpidas, con error...)."""
+        entry = self.manager.history.get_entry(entry_id) or {}
+        return (entry.get("kind") == "file"
+                and (status in ("pausado", "en espera", "en cola", "interrumpida")
+                     or status.startswith(("error", "cancelado"))))
 
     def show_list_menu(self, position):
         menu = QMenu(self)
         if self.list.itemAt(position):
             menu.addActions([self.act_open, self.act_open_folder, self.act_progress])
             menu.addSeparator()
-            menu.addActions([self.act_resume, self.act_stop, self.act_redownload])
+            menu.addActions([self.act_resume, self.act_stop, self.act_redownload, self.act_refresh_address])
             menu.addSeparator()
             menu.addActions([self.act_copy_url, self.act_delete])
         else:
@@ -803,6 +815,27 @@ class DownloadApp(QMainWindow):
         else:
             # Entradas de versiones anteriores (sin tipo): se consulta la URL, como en "Añadir URL"
             self.process_new_url(entry["url"])
+
+    def refresh_address_selected(self):
+        ids = self.selected_ids()
+        entry = self.manager.history.get_entry(ids[0]) if len(ids) == 1 else None
+        if not entry or not self._can_refresh_address(entry["id"], self._status_of(entry["id"])):
+            return
+        headers, _ = self.manager.entry_credentials(entry["id"])
+        referer = next((v for k, v in (headers or {}).items() if k.lower() == "referer"), None)
+        expected = (entry.get("resume") or {}).get("total_size") or entry.get("size") or 0
+        dialog = RefreshAddressDialog(entry, expected, referer, self)
+        self.address_dialog = dialog
+        try:
+            accepted = dialog.exec() == QDialog.Accepted and dialog.url()
+        finally:
+            self.address_dialog = None
+        if not accepted:
+            return
+        if self.manager.change_address(entry["id"], dialog.url(), dialog.headers, dialog.cookies):
+            self.log_message(f"Dirección actualizada: {os.path.basename(entry.get('output_path', ''))}")
+            self.resume_entry(entry["id"])
+            self.refresh_list()
 
     def show_progress_dialog(self, task_id):
         dialog = self.dialogs.get(task_id)
@@ -1021,6 +1054,11 @@ class DownloadApp(QMainWindow):
             context = BrowserContext.from_payload(payload)
             self.log_message(f"Solicitud del navegador ({kind}): {url[:150]}")
             self.logger.info(f"Contexto del navegador: {context.summary()}")
+
+            if self.address_dialog is not None and kind in ("file", "auto"):
+                # "Actualizar dirección" está esperando el enlace nuevo: no es una descarga nueva
+                self.address_dialog.capture(url, context)
+                return
 
             if kind in ("video", "stream"):
                 self.show_video_quality_dialog(url, context=context, prefer_stream=(kind == "stream"), from_browser=True)

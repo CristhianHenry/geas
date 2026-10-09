@@ -411,6 +411,33 @@ class DownloadManager:
         cookies = _cookies_from_list(secrets.get("cookies"))
         return secrets.get("headers") or None, cookies if len(cookies) else None
 
+    def change_address(self, entry_id, url, headers=None, cookies=None):
+        """
+        Nueva dirección para una descarga a medias (su enlace venció). Lo descargado se
+        conserva: como el usuario indica que es el mismo archivo, al reanudar solo se
+        compara el tamaño (otro servidor puede dar otra fecha o ETag).
+        headers/cookies: los del navegador si el enlace vino de él (reemplazan a los guardados).
+        """
+        task = self.tasks.get(entry_id)
+        if task is not None:
+            self._dequeue(entry_id)
+            if self.is_active(entry_id):
+                task.cancel()  # guarda el avance
+            if task.started and task.thread.is_alive():
+                task.thread.join(5)  # que suelte el .part antes de seguir con el enlace nuevo
+            del self.tasks[entry_id]
+        entry = self.history.get_entry(entry_id)
+        if not entry:
+            return False
+        fields = {"url": url}
+        if entry.get("resume"):
+            fields["resume"] = {k: v for k, v in entry["resume"].items() if k not in ("etag", "last_modified")}
+        if headers or cookies:
+            secrets = {k: v for k, v in (("headers", headers), ("cookies", _cookies_to_list(cookies))) if v}
+            fields["secrets"] = secure_store.protect(secrets)
+        self.history.update_entry(entry_id, touch=False, **fields)
+        return True
+
     def can_resume(self, entry_id):
         """Hay datos para continuar la descarga donde quedó (archivos: siempre; videos: si se guardó el formato)."""
         entry = self.history.get_entry(entry_id)
