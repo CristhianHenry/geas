@@ -84,7 +84,8 @@
     // Las raíces cerradas solo pueden estar en elementos personalizados (con guion)
     if (!node.localName.includes("-")) return null;
     try {
-      return chrome.dom && chrome.dom.openOrClosedShadowRoot ? chrome.dom.openOrClosedShadowRoot(node) : null;
+      if (chrome.dom && chrome.dom.openOrClosedShadowRoot) return chrome.dom.openOrClosedShadowRoot(node);
+      return node.openOrClosedShadowRoot || null; // Firefox: propiedad solo visible para extensiones
     } catch (e) {
       return null;
     }

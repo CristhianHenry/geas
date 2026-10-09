@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Geas Download Manager — Grab Everything At Speed",
     "short_name": "Geas",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "Envía descargas, videos y streams a Geas, un gestor de descargas que usa varias conexiones a la vez",
     "icons": {
         "16": "icons/geas-16.png",

@@ -99,11 +99,19 @@ brew install ffmpeg
 
 La extensión siempre tiene el mismo ID (`jbiallikbligfngadffjbakjkiniiigk`), sin importar desde qué carpeta se cargue.
 
+**Firefox (128 o posterior):** Firefox necesita su propia versión de la extensión:
+
+```bash
+python build_extension.py firefox
+```
+
+Luego abre `about:debugging#/runtime/this-firefox`, pulsa "Cargar complemento temporario…" y elige `dist/firefox/manifest.json`. Así queda cargada hasta cerrar Firefox; para dejarla instalada, Mozilla tiene que firmar `dist/geas-firefox-<versión>.zip` (se sube a addons.mozilla.org, aunque no se publique allí).
+
 ### 2. Configurar Native Messaging
 
 **Windows:**
 ```bash
-# Ejecutar desde el directorio del proyecto (registra Chrome y Edge)
+# Ejecutar desde el directorio del proyecto (registra Chrome, Edge y Firefox)
 register_host.bat
 ```
 

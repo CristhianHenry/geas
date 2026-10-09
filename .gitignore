@@ -13,6 +13,10 @@ download_history.json.tmp
 # Clave privada y paquetes de la extensión: la .pem nunca se publica
 *.pem
 *.crx
+dist/
+
+# Manifiestos del host nativo que genera register_host.bat
+com.geas.host.firefox.json
 
 # Pruebas con videos y sitios de terceros
 test_video.mp4

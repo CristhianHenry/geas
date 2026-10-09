@@ -1,12 +1,14 @@
 // Geas - popup: estado de la conexión, ajustes y medios de la pestaña actual
 import { DEFAULT_SETTINGS } from "./settings.js";
 
+// Firefox usa "browser" (con promesas); Chrome y Edge, "chrome"
+const api = globalThis.browser ?? globalThis.chrome;
 const $ = (id) => document.getElementById(id);
 let currentTab = null;
 
 async function send(message) {
   try {
-    return (await chrome.runtime.sendMessage(message)) || { ok: false, error: "Sin respuesta" };
+    return (await api.runtime.sendMessage(message)) || { ok: false, error: "Sin respuesta" };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -87,16 +89,16 @@ async function renderMedia() {
 }
 
 async function init() {
-  $("version").textContent = `v${chrome.runtime.getManifest().version}`;
+  $("version").textContent = `v${api.runtime.getManifest().version}`;
 
-  const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
+  const settings = await api.storage.local.get(DEFAULT_SETTINGS);
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     const checkbox = $(key);
     checkbox.checked = settings[key];
-    checkbox.addEventListener("change", () => chrome.storage.local.set({ [key]: checkbox.checked }));
+    checkbox.addEventListener("change", () => api.storage.local.set({ [key]: checkbox.checked }));
   }
 
-  [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  [currentTab] = await api.tabs.query({ active: true, currentWindow: true });
   const pageButton = $("downloadPage");
   pageButton.disabled = !currentTab || !/^https?:/i.test(currentTab.url || "");
   pageButton.addEventListener("click", async () => {

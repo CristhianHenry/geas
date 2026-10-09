@@ -5,6 +5,9 @@
 //    sin ellos muchos servidores responden 403 o entregan otra cosa.
 import { DEFAULT_SETTINGS } from "./settings.js";
 
+// Firefox usa "browser" (con promesas); Chrome y Edge, "chrome"
+const api = globalThis.browser ?? globalThis.chrome;
+
 const HOST_NAME = "com.geas.host";
 
 // ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ function sanitizeFileName(name) {
 
 async function getSettings() {
   try {
-    return await chrome.storage.local.get(DEFAULT_SETTINGS);
+    return await api.storage.local.get(DEFAULT_SETTINGS);
   } catch (e) {
     return { ...DEFAULT_SETTINGS };
   }
@@ -69,7 +72,7 @@ async function getSettings() {
 
 async function sendToApp(message) {
   try {
-    const response = await chrome.runtime.sendNativeMessage(HOST_NAME, message);
+    const response = await api.runtime.sendNativeMessage(HOST_NAME, message);
     if (response && response.status === "success") return { ...response, ok: true };
     return { ok: false, error: (response && response.text) || "Respuesta inválida del host nativo" };
   } catch (err) {
@@ -87,7 +90,7 @@ async function collectCookies(urls) {
   const cookies = new Map();
   for (const url of new Set(urls.filter(isHttpUrl))) {
     try {
-      for (const c of await chrome.cookies.getAll({ url })) {
+      for (const c of await api.cookies.getAll({ url })) {
         cookies.set(`${c.domain}|${c.path}|${c.name}`, {
           name: c.name,
           value: c.value,
@@ -120,7 +123,7 @@ function toStreamPayload(entry) {
 async function buildPayload({ kind, url, filename, size, pageUrl, topUrl, title, referer, headers, streams = [], hostHeaders = {}, cookieUrls = [] }) {
   return {
     action: "download",
-    extension_version: chrome.runtime.getManifest().version,
+    extension_version: api.runtime.getManifest().version,
     kind,
     url,
     filename: filename || null,
@@ -140,12 +143,12 @@ async function buildPayload({ kind, url, filename, size, pageUrl, topUrl, title,
 // Avisos dentro de la página (los muestra content.js en el frame principal)
 function notifyTab(tabId, text, error = false) {
   if (typeof tabId !== "number" || tabId < 0) return;
-  chrome.tabs.sendMessage(tabId, { action: "toast", text, error }, { frameId: 0 }).catch(() => {});
+  api.tabs.sendMessage(tabId, { action: "toast", text, error }, { frameId: 0 }).catch(() => {});
 }
 
 async function notifyActiveTab(text, error = false) {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const [tab] = await api.tabs.query({ active: true, lastFocusedWindow: true });
     if (tab) notifyTab(tab.id, text, error);
   } catch (e) {
     // Sin pestaña activa (por ejemplo, ventana de descargas): no hay dónde avisar
@@ -155,7 +158,7 @@ async function notifyActiveTab(text, error = false) {
 // ---------------------------------------------------------------------------
 // Medios detectados por pestaña
 // ---------------------------------------------------------------------------
-// Se guardan también en chrome.storage.session: el service worker se detiene
+// Se guardan también en api.storage.session: el service worker se detiene
 // tras unos segundos sin actividad y perdería lo que tiene en memoria.
 
 const MAX_MEDIA_PER_TAB = 30;
@@ -165,7 +168,7 @@ let persistTimer = null;
 
 function restoreMedia() {
   if (!restorePromise) {
-    restorePromise = chrome.storage.session.get("tabMedia").then((data) => {
+    restorePromise = api.storage.session.get("tabMedia").then((data) => {
       for (const [tabId, items] of Object.entries(data.tabMedia || {})) {
         if (!tabMedia.has(Number(tabId))) tabMedia.set(Number(tabId), items);
       }
@@ -177,7 +180,7 @@ function restoreMedia() {
 function persistMedia() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
-    chrome.storage.session.set({ tabMedia: Object.fromEntries(tabMedia) }).catch(() => {});
+    api.storage.session.set({ tabMedia: Object.fromEntries(tabMedia) }).catch(() => {});
   }, 250);
 }
 
@@ -192,7 +195,7 @@ function publicItems(items) {
 }
 
 function updateBadge(tabId, count) {
-  chrome.action.setBadgeText({ tabId, text: count ? String(count) : "" }).catch(() => {});
+  api.action.setBadgeText({ tabId, text: count ? String(count) : "" }).catch(() => {});
 }
 
 async function addMedia(tabId, entry) {
@@ -209,7 +212,7 @@ async function addMedia(tabId, entry) {
   persistMedia();
   updateBadge(tabId, items.length);
   if (index < 0) {
-    chrome.tabs.sendMessage(tabId, { action: "media_list", items: publicItems(items) }, { frameId: 0 }).catch(() => {});
+    api.tabs.sendMessage(tabId, { action: "media_list", items: publicItems(items) }, { frameId: 0 }).catch(() => {});
   }
 }
 
@@ -338,13 +341,15 @@ function classifyResponse(details) {
   return { kind: "file", contentType, size, name };
 }
 
-chrome.webRequest.onSendHeaders.addListener((details) => {
+api.webRequest.onSendHeaders.addListener((details) => {
   if (details.tabId < 0) return;
   const picked = pickRequestHeaders(details.requestHeaders);
   if (Object.keys(picked).length) requestHeaders.set(details.requestId, picked);
-}, SNIFF_FILTER, ["requestHeaders", "extraHeaders"]);
+}, SNIFF_FILTER, api.webRequest.OnSendHeadersOptions?.EXTRA_HEADERS
+  ? ["requestHeaders", "extraHeaders"]  // Chrome: también Referer, Origin y cookies
+  : ["requestHeaders"]);                // Firefox: ya las entrega todas (y no admite "extraHeaders")
 
-chrome.webRequest.onHeadersReceived.addListener((details) => {
+api.webRequest.onHeadersReceived.addListener((details) => {
   const headers = requestHeaders.get(details.requestId) || {};
   requestHeaders.delete(details.requestId);
   if (details.tabId < 0 || (details.statusCode !== 200 && details.statusCode !== 206)) return;
@@ -373,20 +378,20 @@ chrome.webRequest.onHeadersReceived.addListener((details) => {
 }, SNIFF_FILTER, ["responseHeaders"]);
 
 const forgetRequest = (details) => requestHeaders.delete(details.requestId);
-chrome.webRequest.onCompleted.addListener(forgetRequest, SNIFF_FILTER);
-chrome.webRequest.onErrorOccurred.addListener(forgetRequest, SNIFF_FILTER);
+api.webRequest.onCompleted.addListener(forgetRequest, SNIFF_FILTER);
+api.webRequest.onErrorOccurred.addListener(forgetRequest, SNIFF_FILTER);
 
 // Al cambiar de página se vacía la lista (las descargas no cuentan como navegación)
-chrome.webNavigation.onCommitted.addListener((details) => {
+api.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId === 0) clearTabMedia(details.tabId);
 });
-chrome.tabs.onRemoved.addListener((tabId) => {
+api.tabs.onRemoved.addListener((tabId) => {
   clearTabMedia(tabId);
 });
 
 // Respuestas a formularios POST: no se pueden repetir fuera del navegador
 const postNavigations = new Map(); // url -> momento del POST
-chrome.webRequest.onBeforeRequest.addListener((details) => {
+api.webRequest.onBeforeRequest.addListener((details) => {
   if (details.method !== "POST") return;
   const now = Date.now();
   postNavigations.set(details.url, now);
@@ -440,7 +445,7 @@ async function downloadMediaEntry(tabId, key) {
   const items = await getTabMedia(tabId);
   const entry = items.find((item) => item.key === key);
   if (!entry) return { ok: false, error: "El medio ya no está disponible; recarga la página" };
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const tab = await api.tabs.get(tabId).catch(() => null);
   const topUrl = tab ? tab.url : null;
   const title = tab ? tab.title : null;
 
@@ -507,8 +512,8 @@ async function interceptDownload(item) {
   const settings = await getSettings();
   if (!settings.interceptDownloads || !shouldIntercept(item)) return false;
 
-  await chrome.downloads.cancel(item.id).catch(() => {});
-  chrome.downloads.erase({ id: item.id }).catch(() => {});
+  await api.downloads.cancel(item.id).catch(() => {});
+  api.downloads.erase({ id: item.id }).catch(() => {});
 
   const url = item.finalUrl || item.url;
   const result = await sendToApp(await buildPayload({
@@ -524,18 +529,26 @@ async function interceptDownload(item) {
     notifyActiveTab("Descarga enviada a Geas");
   } else {
     // Geas no está disponible: la descarga vuelve al navegador
-    chrome.downloads.download({ url: item.url }).catch(() => {});
+    api.downloads.download({ url: item.url }).catch(() => {});
     notifyActiveTab(`Geas no respondió (${result.error}). La descarga continúa en el navegador.`, true);
   }
   return true;
 }
 
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  interceptDownload(item).then((captured) => {
-    if (!captured) suggest();
-  }, () => suggest());
-  return true; // suggest() se llama de forma asíncrona
-});
+if (api.downloads.onDeterminingFilename) {
+  // Chrome y Edge: se decide antes de que la descarga empiece
+  api.downloads.onDeterminingFilename.addListener((item, suggest) => {
+    interceptDownload(item).then((captured) => {
+      if (!captured) suggest();
+    }, () => suggest());
+    return true; // suggest() se llama de forma asíncrona
+  });
+} else {
+  // Firefox no tiene onDeterminingFilename: la descarga recién creada se cancela y pasa a Geas
+  api.downloads.onCreated.addListener((item) => {
+    interceptDownload(item).catch(() => {});
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Menú contextual
@@ -574,7 +587,7 @@ function collectPageLinks(selectionOnly) {
 
 async function requestAllLinks(info, tab) {
   const frameUrl = info.frameUrl || info.pageUrl || tab.url;
-  const [injection] = await chrome.scripting.executeScript({
+  const [injection] = await api.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [info.frameId || 0] },
     func: collectPageLinks,
     args: [info.menuItemId === "geas_selection_links"]
@@ -630,7 +643,7 @@ async function handleContextMenu(info, tab) {
   notifyTab(tabId, result.ok ? "Enviado a Geas" : `Geas: ${result.error}`, !result.ok);
 }
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+api.contextMenus.onClicked.addListener((info, tab) => {
   handleContextMenu(info, tab).catch((err) => notifyTab(tab && tab.id, `Geas: ${err.message || err}`, true));
 });
 
@@ -640,32 +653,32 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 async function injectIntoOpenTabs() {
   // Las pestañas abiertas antes de instalar/actualizar no tienen el script de contenido
-  const tabs = await chrome.tabs.query({ url: HTTP_URLS }).catch(() => []);
+  const tabs = await api.tabs.query({ url: HTTP_URLS }).catch(() => []);
   for (const tab of tabs) {
     const target = { tabId: tab.id, allFrames: true };
-    chrome.scripting.insertCSS({ target, files: ["content.css"] }).catch(() => {});
-    chrome.scripting.executeScript({ target, files: ["content.js"] }).catch(() => {});
+    api.scripting.insertCSS({ target, files: ["content.css"] }).catch(() => {});
+    api.scripting.executeScript({ target, files: ["content.js"] }).catch(() => {});
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
+api.runtime.onInstalled.addListener(() => {
+  api.contextMenus.removeAll().then(() => {
+    api.contextMenus.create({
       id: "geas_download",
       title: "Descargar con Geas",
       contexts: ["link", "video", "audio", "image"]
     });
-    chrome.contextMenus.create({
+    api.contextMenus.create({
       id: "geas_page_video",
       title: "Descargar video de esta página con Geas",
       contexts: ["page", "frame"]
     });
-    chrome.contextMenus.create({
+    api.contextMenus.create({
       id: "geas_all_links",
       title: "Descargar todos los enlaces con Geas",
       contexts: ["page", "frame"]
     });
-    chrome.contextMenus.create({
+    api.contextMenus.create({
       id: "geas_selection_links",
       title: "Descargar los enlaces seleccionados con Geas",
       contexts: ["selection"]
@@ -688,12 +701,12 @@ const MESSAGE_HANDLERS = {
     src: msg.src,
     title: msg.title
   }),
-  download_page: async (msg) => requestVideo({ tab: await chrome.tabs.get(msg.tabId) }),
+  download_page: async (msg) => requestVideo({ tab: await api.tabs.get(msg.tabId) }),
   app_status: () => appStatus(),
   launch_app: () => sendToApp({ action: "launch" })
 };
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handler = msg && MESSAGE_HANDLERS[msg.action];
   if (!handler) return false;
   Promise.resolve()
@@ -702,5 +715,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // respuesta asíncrona
 });
 
-chrome.action.setBadgeBackgroundColor({ color: "#2196F3" }).catch(() => {});
+api.action.setBadgeBackgroundColor({ color: "#2196F3" }).catch(() => {});
 restoreMedia();

@@ -1,14 +1,17 @@
 @echo off
 setlocal
 
-:: Registra el host de Native Messaging de Geas en Chrome y Edge.
+:: Registra el host de Native Messaging de Geas en Chrome, Edge y Firefox.
 :: Uso: register_host.bat [ID_ADICIONAL_DE_EXTENSION]
 
 set "HOST_NAME=com.geas.host"
 set "HOST_DIR=%~dp0"
 set "MANIFEST_PATH=%HOST_DIR%com.geas.host.json"
+set "FIREFOX_MANIFEST_PATH=%HOST_DIR%com.geas.host.firefox.json"
 :: ID fijo de la extension: lo determina la clave "key" de extension\manifest.json
 set "EXTENSION_ID=jbiallikbligfngadffjbakjkiniiigk"
+:: ID de la version para Firefox (FIREFOX_ID en build_extension.py)
+set "FIREFOX_ID={88b57c40-5350-4c01-861e-08f0a563420b}"
 set "EXTRA_ID=%~1"
 
 echo ==========================================
@@ -52,6 +55,18 @@ REG ADD "HKCU\Software\Google\Chrome\NativeMessagingHosts\%HOST_NAME%" /ve /t RE
 :: Add to Registry (HKCU) - Edge
 REG ADD "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
 
+:: Firefox: su propio manifiesto, con el ID de la extension en vez del origen
+(
+echo {
+echo   "name": "%HOST_NAME%",
+echo   "description": "Geas Native Messaging Host",
+echo   "path": "native_messaging_host.bat",
+echo   "type": "stdio",
+echo   "allowed_extensions": [ "%FIREFOX_ID%" ]
+echo }
+) > "%FIREFOX_MANIFEST_PATH%"
+REG ADD "HKCU\Software\Mozilla\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%FIREFOX_MANIFEST_PATH%" /f
+
 :: Quita el registro con el nombre anterior de la app (AppIDM)
 REG DELETE "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.henry.appidm" /f >nul 2>&1
 REG DELETE "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.henry.appidm" /f >nul 2>&1
@@ -59,6 +74,6 @@ REG DELETE "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.henry.appidm" 
 echo.
 echo ==========================================
 echo Registration Complete!
-echo Please restart Chrome/Edge for changes to take effect.
+echo Please restart Chrome/Edge/Firefox for changes to take effect.
 echo ==========================================
 pause

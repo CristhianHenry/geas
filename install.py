@@ -13,6 +13,7 @@ from pathlib import Path
 
 # ID de la extensión de Chrome (fijado por la clave "key" de extension/manifest.json)
 EXTENSION_ID = "jbiallikbligfngadffjbakjkiniiigk"
+FIREFOX_ID = "{88b57c40-5350-4c01-861e-08f0a563420b}"  # el de build_extension.py
 
 
 class GeasInstaller:
@@ -161,6 +162,8 @@ class GeasInstaller:
             # Guardar el manifiesto actualizado
             with open(manifest_file, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
+            if self.platform == "Windows":
+                self._register_firefox_host(manifest)
 
             self.print_success("Native Messaging configurado correctamente")
             return True
@@ -190,6 +193,21 @@ class GeasInstaller:
             self.print_warning("winreg no disponible, registra manualmente ejecutando register_host.bat")
         except Exception as e:
             self.print_warning(f"Error al registrar en Windows: {e}")
+
+    def _register_firefox_host(self, manifest):
+        """Firefox: su propio manifiesto, con el ID de la extensión en vez del origen."""
+        try:
+            import winreg
+            firefox = {key: value for key, value in manifest.items() if key != "allowed_origins"}
+            firefox["allowed_extensions"] = [FIREFOX_ID]
+            firefox_file = self.project_dir / "com.geas.host.firefox.json"
+            with open(firefox_file, 'w', encoding='utf-8') as f:
+                json.dump(firefox, f, indent=2)
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Mozilla\NativeMessagingHosts\com.geas.host") as key:
+                winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(firefox_file))
+            self.print_success("Host registrado para Firefox")
+        except Exception as e:
+            self.print_warning(f"No se pudo registrar el host para Firefox: {e}")
 
     def create_desktop_shortcut(self):
         """Crea un acceso directo en el escritorio (solo Windows)"""
