@@ -6,7 +6,7 @@ from typing import Optional, Callable
 ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 # Orígenes de extensiones; el host nativo (Python) no envía Origin
 EXTENSION_ORIGINS = ("chrome-extension://", "moz-extension://", "extension://")
-DOWNLOAD_KINDS = {"file", "video", "stream", "auto"}
+DOWNLOAD_KINDS = {"file", "video", "stream", "auto", "links"}  # links: "Descargar todos los enlaces"
 
 
 class GeasServer:

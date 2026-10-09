@@ -29,6 +29,7 @@ from video_quality_dialog import VideoQualityDialog
 from file_info_dialog import FileInfoDialog, UrlProbeThread
 from options_dialog import OptionsDialog
 from refresh_dialog import RefreshAddressDialog
+from links_dialog import LinksDialog
 from scheduler_dialog import SchedulerDialog
 from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow, CountdownDialog
 from browser_tab import BrowserTab
@@ -989,8 +990,8 @@ class DownloadApp(QMainWindow):
     # Inicio de descargas
     # ------------------------------------------------------------------
 
-    def start_file_download(self, url, save_path, headers=None, cookies=None, start=True):
-        """Inicia (o deja en espera) una descarga directa multi-conexión"""
+    def start_file_download(self, url, save_path, headers=None, cookies=None, start=True, batch=False):
+        """Inicia (o deja en espera) una descarga directa multi-conexión. batch: una de muchas (sin ventanas)."""
         task_id = self.manager.add_download(
             url, save_path,
             threads=self.app_settings.get("default_threads"),
@@ -1000,11 +1001,44 @@ class DownloadApp(QMainWindow):
             start=start,
             max_retries=self.app_settings.get("auto_retry_count")
         )
+        if batch:
+            return task_id  # quien añade el lote avisa y refresca la lista una sola vez
         self.log_message(f"Nueva descarga {'añadida' if start else 'en espera'}: {os.path.basename(save_path)}")
         if start and self.app_settings.get("show_progress_dialog"):
             self.show_progress_dialog(task_id)
         self.refresh_list()
         return task_id
+
+    def show_links_dialog(self, payload, context):
+        """Descargar todos los enlaces de una página (desde la extensión): se eligen y van todos a la cola."""
+        links = [link for link in payload.get("links") or []
+                 if isinstance(link, dict) and str(link.get("url", "")).lower().startswith(("http://", "https://"))]
+        if not links:
+            self.log_message("La página no tiene enlaces para descargar")
+            return
+        dialog = LinksDialog(links, self.app_settings.get("default_download_folder"), payload.get("title") or "", self)
+        self.bring_to_front(dialog)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        folder = dialog.folder()
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as e:
+            QMessageBox.warning(self, "Geas", f"No se pudo usar la carpeta:\n{e}")
+            return
+        used = set()  # nombres repetidos dentro del lote: los archivos aún no existen en el disco
+        urls = dialog.selected_urls()
+        for url in urls:
+            path = unique_path(os.path.join(folder, sanitize_filename(filename_from_url(url, "descarga"))))
+            base, ext = os.path.splitext(path)
+            number = 1
+            while path.lower() in used:
+                path = f"{base} ({number}){ext}"
+                number += 1
+            used.add(path.lower())
+            self.start_file_download(url, path, headers=context.http_headers(), cookies=context.cookie_jar(), batch=True)
+        self.log_message(f"{len(urls)} enlaces añadidos a la cola desde {str(payload.get('url', ''))[:150]}")
+        self.refresh_list()
 
     def show_video_quality_dialog(self, url, context=None, prefer_stream=False, from_browser=False, replace_entry=None):
         """Mostrar diálogo de selección de calidad"""
@@ -1063,7 +1097,9 @@ class DownloadApp(QMainWindow):
                 self.address_dialog.capture(url, context)
                 return
 
-            if kind in ("video", "stream"):
+            if kind == "links":
+                self.show_links_dialog(payload, context)
+            elif kind in ("video", "stream"):
                 self.show_video_quality_dialog(url, context=context, prefer_stream=(kind == "stream"), from_browser=True)
             elif kind == "file":
                 self.start_browser_file_download(url, context, payload.get("filename"), payload.get("size"))

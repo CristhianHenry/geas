@@ -117,7 +117,7 @@ function toStreamPayload(entry) {
   };
 }
 
-async function buildPayload({ kind, url, filename, size, pageUrl, topUrl, title, referer, headers, streams = [], hostHeaders = {} }) {
+async function buildPayload({ kind, url, filename, size, pageUrl, topUrl, title, referer, headers, streams = [], hostHeaders = {}, cookieUrls = [] }) {
   return {
     action: "download",
     extension_version: chrome.runtime.getManifest().version,
@@ -133,7 +133,7 @@ async function buildPayload({ kind, url, filename, size, pageUrl, topUrl, title,
     headers: headers || {},
     streams: streams.map(toStreamPayload),
     host_headers: hostHeaders,
-    cookies: await collectCookies([url, pageUrl, topUrl, ...streams.flatMap((s) => [s.url, s.segmentUrl])])
+    cookies: await collectCookies([url, pageUrl, topUrl, ...streams.flatMap((s) => [s.url, s.segmentUrl]), ...cookieUrls])
   };
 }
 
@@ -553,12 +553,62 @@ function guessLinkKind(url) {
   return "auto"; // Geas consulta la URL: si es una página busca el video, si no la descarga
 }
 
+// Se ejecuta dentro de la página: los enlaces http(s) del documento (o solo los de la selección)
+function collectPageLinks(selectionOnly) {
+  let anchors = [...document.querySelectorAll("a[href]")];
+  const selection = window.getSelection();
+  if (selectionOnly && selection && selection.rangeCount) {
+    anchors = anchors.filter((a) => selection.containsNode(a, true));
+  }
+  const seen = new Set();
+  const links = [];
+  for (const a of anchors) {
+    const url = a.href;
+    if (!/^https?:/i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    links.push({ url, text: (a.textContent || a.title || "").trim().replace(/\s+/g, " ").slice(0, 200) });
+    if (links.length >= 5000) break;
+  }
+  return links;
+}
+
+async function requestAllLinks(info, tab) {
+  const frameUrl = info.frameUrl || info.pageUrl || tab.url;
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id, frameIds: [info.frameId || 0] },
+    func: collectPageLinks,
+    args: [info.menuItemId === "geas_selection_links"]
+  });
+  const links = (injection && injection.result) || [];
+  if (!links.length) return { ok: false, error: "no se encontraron enlaces" };
+  // Las cookies de cada sitio enlazado (no de cada enlace: puede haber miles)
+  const origins = [...new Set(links.map((link) => new URL(link.url).origin))].slice(0, 50);
+  return sendToApp({
+    ...(await buildPayload({
+      kind: "links",
+      url: frameUrl,
+      pageUrl: frameUrl,
+      topUrl: tab.url,
+      title: tab.title,
+      referer: frameUrl,
+      cookieUrls: origins.map((origin) => origin + "/")
+    })),
+    links
+  });
+}
+
 async function handleContextMenu(info, tab) {
   const tabId = tab ? tab.id : -1;
   const frameUrl = info.frameUrl || info.pageUrl || (tab && tab.url);
   let result;
 
-  if (info.menuItemId === "geas_page_video" || info.mediaType === "video" || info.mediaType === "audio") {
+  if (info.menuItemId === "geas_all_links" || info.menuItemId === "geas_selection_links") {
+    if (!tab || !isHttpUrl(tab.url)) {
+      notifyTab(tabId, "Geas: en esta página no se pueden leer los enlaces", true);
+      return;
+    }
+    result = await requestAllLinks(info, tab);
+  } else if (info.menuItemId === "geas_page_video" || info.mediaType === "video" || info.mediaType === "audio") {
     const src = info.menuItemId === "geas_page_video" ? null : info.srcUrl;
     result = await requestVideo({ tab, frameId: info.frameId || 0, frameUrl, src });
   } else {
@@ -609,6 +659,16 @@ chrome.runtime.onInstalled.addListener(() => {
       id: "geas_page_video",
       title: "Descargar video de esta página con Geas",
       contexts: ["page", "frame"]
+    });
+    chrome.contextMenus.create({
+      id: "geas_all_links",
+      title: "Descargar todos los enlaces con Geas",
+      contexts: ["page", "frame"]
+    });
+    chrome.contextMenus.create({
+      id: "geas_selection_links",
+      title: "Descargar los enlaces seleccionados con Geas",
+      contexts: ["selection"]
     });
   });
   injectIntoOpenTabs();
