@@ -1082,7 +1082,8 @@ class DownloadApp(QMainWindow):
         used = set()  # nombres repetidos dentro del lote: los archivos aún no existen en el disco
         urls = dialog.selected_urls()
         for url in urls:
-            path = unique_path(os.path.join(folder, sanitize_filename(filename_from_url(url, "descarga"))))
+            name = sanitize_filename(filename_from_url(url, "descarga"))
+            path = unique_path(os.path.join(self.folder_for(name, base=folder), name))
             base, ext = os.path.splitext(path)
             number = 1
             while path.lower() in used:
@@ -1098,7 +1099,8 @@ class DownloadApp(QMainWindow):
         try:
             convert = self.app_settings.get("convert_to_h264")
             dialog = VideoQualityDialog(url, self.manager, self, context=context, prefer_stream=prefer_stream,
-                                        folder=self.app_settings.get("default_download_folder"),
+                                        folder=self.folder_for("video.mp4"),
+                                        audio_folder=self.folder_for("audio.mp3"),
                                         convert_note=bool(convert and find_ffmpeg()))
             if from_browser:
                 self.bring_to_front(dialog)
@@ -1189,11 +1191,19 @@ class DownloadApp(QMainWindow):
         thread.probed.connect(on_probed)
         thread.start()
 
+    def folder_for(self, filename, base=None):
+        """Carpeta para un archivo: la de descargas o, con la opción activada, la subcarpeta de su tipo."""
+        base = base or self.app_settings.get("default_download_folder")
+        if self.app_settings.get("category_folders"):
+            category = category_of(filename)[0]
+            if category != "General":
+                return os.path.join(base, category)
+        return base
+
     def start_browser_file_download(self, url, context, filename=None, size=None, ask=False):
         """Descarga un archivo (con Referer, User-Agent y cookies del navegador si vienen de él)"""
-        folder = self.app_settings.get("default_download_folder")
         name = sanitize_filename(filename or filename_from_url(url, "descarga"))
-        save_path = unique_path(os.path.join(folder, name))
+        save_path = unique_path(os.path.join(self.folder_for(name), name))
         start = True
 
         if ask or not self.app_settings.get("auto_start_downloads", True):

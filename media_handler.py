@@ -506,12 +506,12 @@ class MediaHandler:
             smart_formats.append({
                 'format_id': 'bestaudio/best',
                 'ext': 'mp3',
-                'resolution': 'Audio Only',
+                'resolution': 'Solo audio (MP3)',
                 'filesize': best_audio_size,
                 'filesize_approx': None,
                 'vcodec': 'none',
                 'acodec': best_audio.get('acodec'),
-                'note': 'Best Quality',
+                'note': 'Mejor calidad',
                 'tbr': best_audio.get('tbr', 0),
                 'type': 'audio'
             })

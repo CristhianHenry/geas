@@ -209,6 +209,14 @@ class OptionsDialog(QDialog):
         row.addWidget(self.folder)
         row.addWidget(browse)
         layout.addLayout(row)
+        layout.addSpacing(8)
+        self.category_folders = self._check("Guardar cada tipo de archivo en su subcarpeta", "category_folders")
+        layout.addWidget(self.category_folders)
+        example = QLabel("Video, Música, Comprimidos, Documentos y Programas, dentro de la carpeta de arriba "
+                         "(por ejemplo: Descargas\\Video\\capitulo.mp4). Los demás archivos quedan en la carpeta.")
+        example.setObjectName("Hint")
+        example.setWordWrap(True)
+        layout.addWidget(example)
         layout.addStretch()
         return page
 
@@ -264,6 +272,7 @@ class OptionsDialog(QDialog):
     def accept(self):
         values = {
             "default_download_folder": self.folder.text().strip(),
+            "category_folders": self.category_folders.isChecked(),
             "default_threads": self.threads.value(),
             "max_simultaneous_downloads": self.max_downloads.value(),
             "download_speed_limit_kbps": self.speed_limit.value(),

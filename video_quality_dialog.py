@@ -57,13 +57,14 @@ class MediaInfoThread(QThread):
 
 class VideoQualityDialog(QDialog):
     def __init__(self, url, manager, parent=None, context=None, prefer_stream=False, folder=None,
-                 convert_note=False):
+                 convert_note=False, audio_folder=None):
         super().__init__(parent)
         self.url = url
         self.manager = manager
         self.context = context  # BrowserContext cuando la solicitud viene del navegador
         self.prefer_stream = prefer_stream
         self.folder = folder or os.path.expanduser("~/Downloads")
+        self.audio_folder = audio_folder or self.folder  # "solo audio" (con carpetas por tipo: Música)
         self.convert_note = convert_note  # avisar que se convertirá a H.264 si hace falta
         self.media_handler = MediaHandler()
         self.selected_format = None
@@ -256,9 +257,13 @@ class VideoQualityDialog(QDialog):
 
     def _update_path(self):
         """Nombre a partir del título; la extensión según sea video o solo audio."""
-        ext = 'mp3' if self.selected_type == 'audio' else 'mp4'
+        audio = self.selected_type == 'audio'
+        ext = 'mp3' if audio else 'mp4'
         current = self.path_input.text().strip()
         folder = os.path.dirname(current) or self.folder
+        # Al pasar de video a audio (o al revés) cambia de carpeta, salvo que el usuario haya elegido otra
+        if os.path.normcase(folder) == os.path.normcase(self.audio_folder if not audio else self.folder):
+            folder = self.audio_folder if audio else self.folder
         name = os.path.splitext(os.path.basename(current))[0]
         if not name or name == "video":
             name = safe_title(self.video_title)
@@ -288,7 +293,8 @@ class VideoQualityDialog(QDialog):
         # Determinar extensión basada en el tipo del formato elegido
         # ("137+bestaudio/137" es video aunque mencione bestaudio)
         ext = 'mp3' if self.selected_type == 'audio' else 'mp4'
-        path = self.path_input.text().strip() or os.path.join(self.folder, f"{safe_title(self.video_title)}.{ext}")
+        folder = self.audio_folder if ext == 'mp3' else self.folder
+        path = self.path_input.text().strip() or os.path.join(folder, f"{safe_title(self.video_title)}.{ext}")
         if os.path.splitext(path)[1].lower() != f".{ext}":
             path = os.path.splitext(path)[0] + f".{ext}"
 

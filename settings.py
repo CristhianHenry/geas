@@ -7,6 +7,7 @@ import paths
 DEFAULT_CONFIG = {
     "default_download_folder": os.path.expanduser("~/Downloads"),
     "default_threads": 4,
+    "category_folders": False,      # cada tipo de archivo en su subcarpeta (Video, Música...), como IDM
     "max_simultaneous_downloads": 3,  # las demás esperan en la cola
     "download_speed_limit_kbps": 0,  # 0 = sin límite
     "auto_retry_count": 3,
