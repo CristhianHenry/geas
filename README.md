@@ -46,6 +46,24 @@
 
 ## Instalación
 
+### Con el instalador (Windows 10/11)
+
+Ejecuta `Geas-Setup-<versión>.exe`. Se instala para tu usuario (no pide permisos de administrador) en `%LOCALAPPDATA%\Programs\Geas`, registra la conexión con Chrome, Edge y Firefox, y guarda tus datos (opciones, historial, registro) en `%APPDATA%\Geas`. No hace falta instalar Python. Windows puede mostrar "Windows protegió tu PC" porque el instalador no está firmado: "Más información" → "Ejecutar de todas formas".
+
+Geas instalada actualiza yt-dlp desde **Ayuda → Actualizar yt-dlp** y, si `UPDATE_REPO` de `version.py` apunta al repositorio de GitHub, busca versiones nuevas de sí misma una vez al día.
+
+**Generar el instalador:**
+
+```bash
+pip install pyinstaller
+winget install --id JRSoftware.InnoSetup -e
+python build_windows.py
+```
+
+Deja el programa en `dist/Geas/` y el instalador en `dist/Geas-Setup-<versión>.exe` (la versión sale de `version.py`).
+
+### Desde el código fuente
+
 ### 1. Clonar el Repositorio
 
 ```bash

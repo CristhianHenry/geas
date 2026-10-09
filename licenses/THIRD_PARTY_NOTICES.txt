@@ -1,0 +1,26 @@
+Geas Download Manager incluye los siguientes componentes de terceros.
+
+Qt 6 y Qt for Python (PySide6, Shiboken6) 6.12
+  Licencia: GNU Lesser General Public License v3 (LGPL-3.0), texto en LGPL-3.0.txt y GPL-3.0.txt.
+  Código fuente: https://code.qt.io/  y  https://download.qt.io/official_releases/QtForPython/
+  Las bibliotecas de Qt se incluyen como archivos separados (carpeta _internal\PySide6):
+  se pueden reemplazar por otra versión compatible de Qt.
+  Qt WebEngine incluye Chromium, con sus propias licencias: https://www.chromium.org/
+
+yt-dlp
+  Licencia: The Unlicense (dominio público). https://github.com/yt-dlp/yt-dlp
+
+Python 3
+  Licencia: Python Software Foundation License. https://www.python.org/
+
+requests, urllib3, certifi, charset-normalizer, idna
+  Licencias: Apache-2.0 (requests), MIT (urllib3, charset-normalizer), MPL-2.0 (certifi), BSD-3-Clause (idna).
+
+Flask, Werkzeug, Jinja2, MarkupSafe, ItsDangerous, Click, Blinker, flask-cors
+  Licencia: BSD-3-Clause (flask-cors: MIT).
+
+PySocks
+  Licencia: BSD-3-Clause.
+
+Beautiful Soup 4, soupsieve, lxml
+  Licencias: MIT (Beautiful Soup, soupsieve), BSD-3-Clause (lxml; incluye libxml2 y libxslt, licencia MIT).

@@ -14,6 +14,7 @@ download_history.json.tmp
 *.pem
 *.crx
 dist/
+build/
 
 # Manifiestos del host nativo que genera register_host.bat
 com.geas.host.firefox.json
