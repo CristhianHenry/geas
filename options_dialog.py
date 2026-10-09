@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QCheckBox,
     QSpinBox, QLineEdit, QPushButton, QLabel, QFileDialog, QMessageBox, QDialogButtonBox,
-    QGroupBox, QRadioButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
+    QGroupBox, QRadioButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QComboBox
 )
 from PySide6.QtCore import Qt
 
@@ -13,6 +13,7 @@ import app_updater
 import icons
 import network
 import secure_store
+import theme
 import ytdlp_updater
 from media_handler import find_ffmpeg
 
@@ -65,6 +66,16 @@ class OptionsDialog(QDialog):
         for widget in (self.auto_start, self.show_progress, self.clipboard, self.notifications, self.tray,
                        self.check_app):
             layout.addWidget(widget)
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(QLabel("Tema:"))
+        self.theme = QComboBox()
+        for value, label in theme.CHOICES:
+            self.theme.addItem(label, value)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(self.settings.get("theme"))))
+        theme_row.addWidget(self.theme)
+        theme_row.addStretch()
+        layout.addSpacing(6)
+        layout.addLayout(theme_row)
         layout.addStretch()
         return page
 
@@ -285,6 +296,7 @@ class OptionsDialog(QDialog):
             "convert_to_h264": self.convert.isChecked(),
             "check_ytdlp_updates": self.check_ytdlp.isChecked(),
             "check_app_updates": self.check_app.isChecked(),
+            "theme": self.theme.currentData(),
             "proxy_mode": (network.PROXY_MANUAL if self.proxy_manual.isChecked()
                            else network.PROXY_NONE if self.proxy_none.isChecked() else network.PROXY_SYSTEM),
             "proxy_url": secure_store.protect(network.normalize_proxy(self.proxy_url.text())) or "",

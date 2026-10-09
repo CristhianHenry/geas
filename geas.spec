@@ -10,7 +10,6 @@ from PyInstaller.depend import bindepend
 
 DATAS = [
     ("style.qss", "."),
-    ("style_dark.qss", "."),
     ("branding/*.svg", "branding"),
     ("branding/*.png", "branding"),
     ("branding/*.ico", "branding"),

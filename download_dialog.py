@@ -9,9 +9,10 @@ from PySide6.QtWidgets import (
     QGroupBox, QAbstractItemView, QMessageBox
 )
 from PySide6.QtCore import QTimer, Qt, QRectF
-from PySide6.QtGui import QPainter, QColor, QLinearGradient
+from PySide6.QtGui import QPainter, QLinearGradient
 
 import icons
+import theme
 from ui_format import format_size, format_speed, format_eta, format_percent, describe_status
 
 
@@ -61,23 +62,23 @@ class SegmentBar(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         rect = self.rect().adjusted(0, 0, -1, -1)
-        painter.fillRect(rect, QColor("#ffffff"))
+        painter.fillRect(rect, theme.color("#ffffff"))
         gradient = QLinearGradient(0, 0, 0, rect.height())
-        gradient.setColorAt(0, QColor("#6db3f2"))
-        gradient.setColorAt(1, QColor("#2f7fd3"))
+        gradient.setColorAt(0, theme.color("#6db3f2"))
+        gradient.setColorAt(1, theme.color("#2f7fd3"))
         width = rect.width() - 1
         if self.segments and self.total:
             for segment in self.segments:
                 x = 1 + segment["start"] / self.total * width
                 filled = min(segment["downloaded"], segment["end"] - segment["start"] + 1) / self.total * width
                 painter.fillRect(QRectF(x, 1, filled, rect.height() - 1), gradient)
-            painter.setPen(QColor("#8a95a1"))
+            painter.setPen(theme.color("#8a95a1"))
             for segment in self.segments[1:]:
                 x = int(1 + segment["start"] / self.total * width)
                 painter.drawLine(x, 1, x, rect.height())
         elif self.fraction:
             painter.fillRect(QRectF(1, 1, width * self.fraction, rect.height() - 1), gradient)
-        painter.setPen(QColor("#b9b9b9"))
+        painter.setPen(theme.color("#b9b9b9"))
         painter.drawRect(rect)
         painter.end()
 

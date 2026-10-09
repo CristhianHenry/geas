@@ -13,12 +13,13 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
 from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess
-from PySide6.QtGui import QAction, QActionGroup, QColor, QLinearGradient, QKeySequence, QBrush, QPalette
+from PySide6.QtGui import QAction, QActionGroup, QLinearGradient, QKeySequence, QBrush
 
 import icons
 import network
 import paths
 import power_actions
+import theme
 import ytdlp_updater
 from ytdlp_dialog import YtDlpUpdateDialog, VersionCheckThread
 import app_updater
@@ -97,16 +98,16 @@ class ProgressDelegate(QStyledItemDelegate):
 
         painter.save()
         bar = option.rect.adjusted(4, 3, -4, -3)
-        painter.setPen(QColor("#b9b9b9"))
-        painter.setBrush(QColor("#ffffff"))
+        painter.setPen(theme.color("#b9b9b9"))
+        painter.setBrush(theme.color("#ffffff"))
         painter.drawRect(bar.adjusted(0, 0, -1, -1))
         filled = int((bar.width() - 2) * max(0.0, min(float(progress), 100.0)) / 100)
         if filled > 0:
             gradient = QLinearGradient(0, bar.top(), 0, bar.bottom())
-            gradient.setColorAt(0, QColor("#b5dafc"))
-            gradient.setColorAt(1, QColor("#66adf2"))
+            gradient.setColorAt(0, theme.color("#b5dafc"))
+            gradient.setColorAt(1, theme.color("#66adf2"))
             painter.fillRect(QRect(bar.left() + 1, bar.top() + 1, filled, bar.height() - 2), gradient)
-        painter.setPen(QColor("#1b1b1b"))
+        painter.setPen(theme.color("#1b1b1b"))
         painter.drawText(bar, Qt.AlignCenter, text)
         painter.restore()
 
@@ -164,6 +165,7 @@ class DownloadApp(QMainWindow):
             self.scheduler = Scheduler(self.manager)
 
             self.apply_stylesheet()
+            QApplication.styleHints().colorSchemeChanged.connect(self._on_system_colors_changed)
             self.setWindowTitle("Geas Download Manager")
             self.setWindowIcon(icons.icon("app"))
             self.resize(1120, 640)
@@ -207,19 +209,12 @@ class DownloadApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def apply_stylesheet(self):
-        app = QApplication.instance()
-        # Selección azul clara (como el Explorador) también donde el estilo no llega, p. ej. el árbol
-        palette = app.palette()
-        palette.setColor(QPalette.Highlight, QColor("#cce8ff"))
-        palette.setColor(QPalette.HighlightedText, QColor("#000000"))
-        app.setPalette(palette)
-        path = paths.resource("style.qss")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                # En toda la aplicación: también en las ventanas sin padre (progreso, navegador)
-                app.setStyleSheet(f.read())
-        except Exception as e:
-            print(f"No se pudo cargar style.qss: {e}")
+        """Tema claro, oscuro o el de Windows (Opciones > General)."""
+        theme.apply(QApplication.instance(), self.app_settings.get("theme"))
+
+    def _on_system_colors_changed(self, *_):
+        if self.app_settings.get("theme") == theme.SYSTEM:  # Windows pasó de claro a oscuro o al revés
+            self.apply_stylesheet()
 
     def _action(self, icon_name, text, slot, shortcut=None, tip=None):
         action = QAction(icons.icon(icon_name), text, self) if icon_name else QAction(text, self)
@@ -463,7 +458,7 @@ class DownloadApp(QMainWindow):
         item.setToolTip(COL_STATUS, text)
         item.setData(COL_STATUS, PROGRESS_ROLE, progress)
         item.setData(COL_STATUS, SORT_ROLE, text.lower())
-        item.setForeground(COL_STATUS, QBrush(QColor("#c42b1c" if status.startswith("error") else "#1b1b1b")))
+        item.setForeground(COL_STATUS, QBrush(theme.color("#c42b1c" if status.startswith("error") else "#1b1b1b")))
 
         item.setText(COL_ETA, format_eta(eta))
         item.setData(COL_ETA, SORT_ROLE, float(eta) if eta is not None else float("inf"))
@@ -869,6 +864,7 @@ class DownloadApp(QMainWindow):
         dialog = OptionsDialog(self.app_settings, self, update_ytdlp=self.show_ytdlp_updater)
         if dialog.exec() == QDialog.Accepted:
             self.manager.set_max_active(self.app_settings.get("max_simultaneous_downloads"))
+            self.apply_stylesheet()  # por si cambió el tema
             network.apply_settings(self.app_settings)
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
             self._update_ffmpeg_label()

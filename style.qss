@@ -1,5 +1,6 @@
-/* Geas - tema claro al estilo de Internet Download Manager
-   (el tema oscuro anterior está en style_dark.qss)
+/* Geas - tema claro al estilo de Internet Download Manager.
+   El tema oscuro sale de esta misma hoja: theme.py cambia cada color por su par oscuro
+   (un color nuevo aquí necesita su par en theme.DARK_COLORS).
 
    Fondo de ventanas: #F0F0F0 (Windows)      Listas: #FFFFFF
    Selección: #CCE8FF / borde #99D1FF        Acento: #0078D7
@@ -147,7 +148,7 @@ QPushButton#BrowseButton {
 QPushButton#PrimaryButton {
     background-color: #0078d7;
     border-color: #005fb0;
-    color: #ffffff;
+    color: white;
     font-weight: bold;
 }
 QPushButton#PrimaryButton:hover {
@@ -165,7 +166,7 @@ QLineEdit, QTextEdit, QPlainTextEdit {
     border-radius: 2px;
     padding: 3px 4px;
     selection-background-color: #0078d7;
-    selection-color: #ffffff;
+    selection-color: white;
 }
 QLineEdit:focus, QPlainTextEdit:focus {
     border-color: #0078d7;

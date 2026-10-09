@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     "site_logins": [],              # [{"site", "user", "password" (cifrada)}]
     "auto_start_downloads": True,
     "minimize_to_tray": False,
+    "theme": "claro",               # "claro", "oscuro" o "sistema" (igual que Windows)
     "show_notifications": True,
     "show_progress_dialog": True,   # ventana de progreso al iniciar una descarga (como IDM)
     "clipboard_monitor": False,     # detectar enlaces copiados
@@ -140,6 +141,11 @@ class AppSettings:
             if threads < 1 or threads > 16:
                 raise ValueError("Los hilos deben estar entre 1 y 16")
             return threads
+
+        elif key == "theme":
+            if value not in ("claro", "oscuro", "sistema"):
+                raise ValueError(f"Tema desconocido: {value}")
+            return value
 
         elif key == "proxy_mode":
             if value not in ("sistema", "ninguno", "manual"):
