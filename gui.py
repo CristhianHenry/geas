@@ -13,9 +13,10 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
 from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess
-from PySide6.QtGui import QAction, QColor, QLinearGradient, QKeySequence, QBrush, QPalette
+from PySide6.QtGui import QAction, QActionGroup, QColor, QLinearGradient, QKeySequence, QBrush, QPalette
 
 import icons
+import power_actions
 import ytdlp_updater
 from ytdlp_dialog import YtDlpUpdateDialog, VersionCheckThread
 from manager import DownloadManager
@@ -27,7 +28,7 @@ from video_quality_dialog import VideoQualityDialog
 from file_info_dialog import FileInfoDialog, UrlProbeThread
 from options_dialog import OptionsDialog
 from scheduler_dialog import SchedulerDialog
-from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow
+from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow, CountdownDialog
 from browser_tab import BrowserTab
 from browser_context import BrowserContext
 from enhanced_downloader import sanitize_filename, unique_path, filename_from_url
@@ -142,6 +143,9 @@ class DownloadApp(QMainWindow):
         self.ytdlp_dialog = None
         self.ytdlp_restart_pending = False  # yt-dlp se actualizó: falta reiniciar
         self._ytdlp_check = None
+        self.finish_action = power_actions.NOTHING  # qué hacer al terminar todas las descargas
+        self._finish_armed = False    # hubo descargas en curso después de elegir la acción
+        self._finish_pending = False  # la cuenta regresiva está abierta
 
         try:
             self.app_settings = AppSettings()
@@ -239,6 +243,13 @@ class DownloadApp(QMainWindow):
                                              tip="Actualizar el componente que reconoce los videos de las páginas")
         self.act_about = self._action("app", "Acerca de Geas", self.show_about)
         self.act_categories = QAction("Categorías", self, checkable=True, checked=True)
+        self.finish_group = QActionGroup(self)  # "Al terminar las descargas": una opción a la vez
+        self.finish_actions = {}
+        for key, label, _ in power_actions.ACTIONS:
+            action = QAction(label, self, checkable=True, checked=(key == power_actions.NOTHING))
+            action.triggered.connect(lambda _checked=False, k=key: self.set_finish_action(k))
+            self.finish_group.addAction(action)
+            self.finish_actions[key] = action
 
     def _create_menus(self):
         bar = self.menuBar()
@@ -258,6 +269,8 @@ class DownloadApp(QMainWindow):
         downloads.addActions([self.act_resume, self.act_stop])
         downloads.addSeparator()
         downloads.addActions([self.act_resume_all, self.act_stop_all])
+        self.finish_menu = downloads.addMenu("Al terminar las descargas")
+        self.finish_menu.addActions(list(self.finish_actions.values()))
         downloads.addSeparator()
         downloads.addAction(self.act_delete_done)
         downloads.addSeparator()
@@ -515,7 +528,50 @@ class DownloadApp(QMainWindow):
             text += f" · {queued} en cola (máximo {self.manager.max_active} a la vez)"
         if waiting:
             text += f" · {waiting} en pausa o en espera"
+        if self.finish_action != power_actions.NOTHING:
+            text += f" · Al terminar: {power_actions.LABELS[self.finish_action]}"
         self.status_label.setText(text)
+        self._check_finish_action(len(active) + queued)
+
+    # ------------------------------------------------------------------
+    # Al terminar las descargas: cerrar Geas, suspender o apagar el equipo
+    # ------------------------------------------------------------------
+
+    def set_finish_action(self, action):
+        self.finish_action = action
+        self.finish_actions[action].setChecked(True)
+        self._finish_armed = False
+        if action != power_actions.NOTHING:
+            self.log_message(f"Al terminar las descargas: {power_actions.LABELS[action]}")
+
+    def _check_finish_action(self, pending):
+        """Con una acción elegida, la ejecuta cuando ya no queda nada descargando ni en cola."""
+        if self.finish_action == power_actions.NOTHING or self._finish_pending:
+            return
+        if pending:
+            self._finish_armed = True  # hubo descargas después de elegirla
+        elif self._finish_armed:
+            self._finish_armed = False
+            self._finish_pending = True
+            QTimer.singleShot(0, self._run_finish_action)  # fuera del refresco de la lista
+
+    def _run_finish_action(self):
+        action = self.finish_action
+        dialog = CountdownDialog(power_actions.COUNTDOWN_TEXT[action], 30, self)
+        accepted = dialog.exec() == QDialog.Accepted
+        self._finish_pending = False
+        self.set_finish_action(power_actions.NOTHING)  # se usa una sola vez
+        if not accepted:
+            self.log_message("Acción al terminar cancelada")
+            return
+        self.log_message(f"Descargas terminadas: {power_actions.LABELS[action]}")
+        if action == power_actions.SLEEP:
+            power_actions.sleep_computer()
+        elif action == power_actions.SHUTDOWN:
+            power_actions.shutdown_computer()  # Windows espera 15 s: Geas se cierra guardando todo
+            self.force_quit()
+        elif action == power_actions.QUIT:
+            self.force_quit()
 
     def selected_ids(self):
         return [item.data(COL_NAME, ID_ROLE) for item in self.list.selectedItems()]
@@ -1047,6 +1103,7 @@ class DownloadApp(QMainWindow):
             show_action.triggered.connect(self.show_window)
             tray_menu.addAction(show_action)
             tray_menu.addAction(self.act_add)
+            tray_menu.addMenu(self.finish_menu)
             tray_menu.addSeparator()
             tray_menu.addAction(self.act_quit)
             self.tray_icon.setContextMenu(tray_menu)
