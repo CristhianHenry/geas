@@ -1,0 +1,9 @@
+{
+  "name": "com.geas.host",
+  "description": "Geas Native Messaging Host",
+  "path": "native_messaging_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://jbiallikbligfngadffjbakjkiniiigk/"
+  ]
+}

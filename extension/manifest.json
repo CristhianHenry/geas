@@ -1,0 +1,55 @@
+{
+    "manifest_version": 3,
+    "name": "Geas Download Manager — Grab Everything At Speed",
+    "short_name": "Geas",
+    "version": "1.3.0",
+    "description": "Envía descargas, videos y streams a Geas, un gestor de descargas que usa varias conexiones a la vez",
+    "icons": {
+        "16": "icons/geas-16.png",
+        "32": "icons/geas-32.png",
+        "48": "icons/geas-48.png",
+        "128": "icons/geas-128.png"
+    },
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3rqMmVsbifteNrIFmUI3VNjoxemupWw77ORbbfB8LbfKz6DoqoVCOL7JSEdIHTYLdhxWxH9/4Vyico1OGCOHK5ZPQtM6isSgoWWISWoh4UGbKB/hUf3VPLpH4yd31OEcid35qN/Dtd9iUgZAx7XSxYU0pW99WNFS6uoVdGzMxgFAi83suQWt+BeRejegxHpJfqyPl3q7bJzSp+AMQsI3Hp2SiBd+A27wJtzE7fU+UbhQ3MSEHRNZguin2JAKcbo5nRbXyN9p6sAsbC7WGz27Gfbmj2tQcXXqLQMTBdSGTQAk8MpaoXmiHMC1BPF3rJOJ1/FHqF+j+zx5QfW2ioDJewIDAQAB",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "contextMenus",
+        "webRequest",
+        "webNavigation",
+        "nativeMessaging",
+        "downloads",
+        "cookies",
+        "storage"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end",
+            "all_frames": true
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Geas Download Manager",
+        "default_icon": {
+            "16": "icons/geas-16.png",
+            "32": "icons/geas-32.png"
+        }
+    }
+}

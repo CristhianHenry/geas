@@ -1,0 +1,24 @@
+# Entorno de Python y cachés
+venv/
+__pycache__/
+*.pyc
+
+# Datos de cada equipo (los crea la app al usarse)
+config.json
+download_history.json
+download_history.json.tmp
+*.log
+*.log.*
+
+# Clave privada y paquetes de la extensión: la .pem nunca se publica
+*.pem
+*.crx
+
+# Pruebas con videos y sitios de terceros
+test_video.mp4
+test_yt.py
+test_habetar.py
+
+# Capturas de la interfaz anterior
+odap.png
+wddaa.png

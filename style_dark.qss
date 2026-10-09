@@ -1,0 +1,289 @@
+/* Premium Dark Theme for Geas */
+
+/* --- Paleta de Colores ---
+   Fondo Principal: #1E1E2E (Catppuccin Mocha Base)
+   Fondo Secundario (Sidebar): #181825 (Mantle)
+   Superficie (Cards/Inputs): #313244 (Surface0)
+   Acento Principal: #89B4FA (Blue)
+   Acento Secundario: #CBA6F7 (Mauve)
+   Texto Principal: #CDD6F4 (Text)
+   Texto Secundario: #A6ADC8 (Subtext0)
+   Bordes: #45475A (Surface1)
+   Error: #F38BA8
+   Success: #A6E3A1
+*/
+
+/* Global Settings */
+QWidget {
+    background-color: #1E1E2E;
+    color: #CDD6F4;
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    font-size: 10pt;
+}
+
+/* --- Sidebar --- */
+/* Identificaremos el sidebar por nombre de objeto en el código Python */
+QWidget#Sidebar {
+    background-color: #181825;
+    border-right: 1px solid #313244;
+}
+
+QPushButton#SidebarButton {
+    background-color: transparent;
+    color: #A6ADC8;
+    text-align: left;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 11pt;
+    font-weight: 500;
+    margin: 4px 8px;
+}
+
+QPushButton#SidebarButton:hover {
+    background-color: #313244;
+    color: #CDD6F4;
+}
+
+QPushButton#SidebarButton:checked {
+    background-color: #89B4FA; /* Accent Color */
+    color: #11111B; /* Dark Text for constrast */
+    font-weight: bold;
+}
+
+QLabel#SidebarTitle {
+    color: #CBA6F7;
+    font-size: 14pt;
+    font-weight: bold;
+    padding: 20px;
+    qproperty-alignment: AlignCenter;
+}
+
+/* --- Content Area --- */
+QWidget#ContentArea {
+    background-color: #1E1E2E;
+}
+
+/* Cards / GroupBox */
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid #45475A;
+    border-radius: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    background-color: #1e1e2e; /* Transparent to let gradient show if applied, or solid */
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px;
+    color: #89B4FA;
+    background-color: #1E1E2E; /* Match background to hide border line behind text */
+}
+
+/* Inputs */
+QLineEdit, QSpinBox, QDateTimeEdit, QTextEdit, QPlainTextEdit {
+    background-color: #313244;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #CDD6F4;
+    selection-background-color: #585b70;
+}
+
+QLineEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QTextEdit:focus {
+    border: 2px solid #89B4FA;
+    background-color: #45475A;
+}
+
+/* Buttons (General) */
+QPushButton {
+    background-color: #89B4FA;
+    color: #11111B;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 10pt;
+}
+
+QPushButton:hover {
+    background-color: #B4BEFE;
+}
+
+QPushButton:pressed {
+    background-color: #74C7EC;
+    padding-top: 9px; /* Pseudo-click effect */
+    padding-bottom: 7px;
+}
+
+QPushButton:disabled {
+    background-color: #45475A;
+    color: #6C7086;
+}
+
+/* Secondary Action Buttons (e.g., Cancel, Clear) */
+QPushButton#SecondaryButton {
+    background-color: #45475A;
+    color: #CDD6F4;
+}
+QPushButton#SecondaryButton:hover {
+    background-color: #585b70;
+}
+
+/* Destructive Actions */
+QPushButton#DangerButton {
+    background-color: #F38BA8;
+    color: #11111B;
+}
+QPushButton#DangerButton:hover {
+    background-color: #F5C2E7; /* Pinker/lighter */
+}
+
+/* Tables */
+QTableWidget {
+    background-color: #1E1E2E;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    gridline-color: #313244;
+    selection-background-color: #45475A;
+    selection-color: #CDD6F4;
+    alternate-background-color: #181825;
+}
+
+QTableWidget::item {
+    padding: 6px;
+    border-bottom: 1px solid #313244;
+}
+
+QHeaderView::section {
+    background-color: #181825;
+    color: #CBA6F7; /* Headers accent */
+    border: none;
+    padding: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 9pt;
+    border-bottom: 2px solid #313244;
+}
+
+QTableCornerButton::section {
+    background-color: #181825;
+    border: none;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    border: none;
+    background: #181825;
+    width: 10px;
+    margin: 0px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background: #45475A;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #585b70;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #181825;
+    height: 10px;
+    margin: 0px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #45475A;
+    min-width: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #585b70;
+}
+
+/* Progress Bar */
+QProgressBar {
+    border: none;
+    border-radius: 6px;
+    text-align: center;
+    background-color: #313244;
+    color: #CDD6F4;
+    height: 16px;
+    font-weight: bold;
+    font-size: 9pt;
+}
+
+QProgressBar::chunk {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #89B4FA, stop:1 #CBA6F7);
+    border-radius: 6px;
+}
+
+/* Checkboxes */
+QCheckBox {
+    spacing: 8px;
+    color: #CDD6F4;
+}
+
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 2px solid #45475A;
+    background: #313244;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #89B4FA;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #89B4FA;
+    border-color: #89B4FA;
+    /* Optional: add checkmark image if available, or just rely on color */
+}
+
+/* Menus */
+QMenu {
+    background-color: #1E1E2E;
+    border: 1px solid #45475A;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 24px 6px 24px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background-color: #313244;
+    color: #89B4FA;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #45475A;
+    margin: 4px 8px;
+}
+
+/* Tooltips */
+QToolTip {
+    background-color: #11111B;
+    color: #CDD6F4;
+    border: 1px solid #45475A;
+    padding: 4px;
+    border-radius: 4px;
+}

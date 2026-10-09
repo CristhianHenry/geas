@@ -1,0 +1,213 @@
+.geas-download-btn {
+  background: linear-gradient(to bottom, #eff5ff 0%, #d3e4ff 100%);
+  color: #000;
+  border: 1px solid #749ab0;
+  border-radius: 3px 3px 0 0;
+  padding: 4px 10px;
+  margin: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  line-height: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  box-sizing: border-box;
+  cursor: pointer;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 11px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  /* Un nivel por debajo del panel y los avisos, que deben quedar encima */
+  z-index: 2147483646;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  opacity: 0.9;
+  transition: opacity 0.2s;
+}
+
+.geas-download-btn.geas-toggle-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  border-radius: 3px;
+  z-index: 2147483647;
+}
+
+.geas-download-btn.geas-toggle-btn::before {
+  content: none;
+}
+
+.geas-download-btn[data-state="ok"],
+.geas-panel-item-btn[data-state="ok"] {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.geas-download-btn[data-state="error"],
+.geas-panel-item-btn[data-state="error"] {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
+.geas-download-btn::before {
+  content: '▶';
+  font-size: 8px;
+  color: #2196F3;
+}
+
+.geas-download-btn:hover {
+  background: linear-gradient(to bottom, #d3e4ff 0%, #eff5ff 100%);
+  opacity: 1;
+}
+
+/* IDM-style Download Panel */
+.geas-panel {
+  position: fixed;
+  /* Debajo del botón "Medios" para no tapar el botón de cerrar */
+  top: 54px;
+  right: 20px;
+  width: 400px;
+  max-height: 500px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(450px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.geas-panel-header {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.geas-panel-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.geas-panel-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.geas-panel-body {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.geas-panel-item {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform 0.2s;
+}
+
+.geas-panel-item:hover {
+  transform: translateX(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.geas-panel-item-info {
+  flex: 1;
+  min-width: 0;
+  margin-right: 12px;
+}
+
+.geas-panel-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geas-panel-item-type {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.geas-panel-item-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.geas-panel-item-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.geas-panel-item-btn:active {
+  transform: scale(0.98);
+}
+
+.geas-panel-item-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Avisos breves (enviado a Geas, errores) */
+.geas-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  max-width: 360px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #1e1e1e;
+  color: #fff;
+  border-left: 4px solid #4caf50;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  z-index: 2147483647;
+  animation: slideIn 0.3s ease-out;
+}
+
+.geas-toast.geas-toast-error {
+  border-left-color: #f44336;
+}

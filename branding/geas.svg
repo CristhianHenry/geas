@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#141014"/>
+  <rect x="3" y="3" width="122" height="122" rx="25" fill="none" stroke="#c8102e" stroke-width="2"/>
+  <g fill="none">
+    <ellipse cx="24" cy="72" rx="6.5" ry="4" transform="rotate(114.6 24 72)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="24" cy="72" rx="6.5" ry="4" transform="rotate(114.6 24 72)" stroke="#e0283f" stroke-width="3"/>
+    <ellipse cx="18.5" cy="84" rx="6.5" ry="1.5" transform="rotate(114.6 18.5 84)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="18.5" cy="84" rx="6.5" ry="1.5" transform="rotate(114.6 18.5 84)" stroke="#e0283f" stroke-width="3"/>
+    <ellipse cx="13" cy="96" rx="6.5" ry="4" transform="rotate(114.6 13 96)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="13" cy="96" rx="6.5" ry="4" transform="rotate(114.6 13 96)" stroke="#e0283f" stroke-width="3"/>
+    <ellipse cx="104" cy="72" rx="6.5" ry="4" transform="rotate(66.4 104 72)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="104" cy="72" rx="6.5" ry="4" transform="rotate(66.4 104 72)" stroke="#e0283f" stroke-width="3"/>
+    <ellipse cx="109.5" cy="84" rx="6.5" ry="1.5" transform="rotate(66.4 109.5 84)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="109.5" cy="84" rx="6.5" ry="1.5" transform="rotate(66.4 109.5 84)" stroke="#e0283f" stroke-width="3"/>
+    <ellipse cx="115" cy="96" rx="6.5" ry="4" transform="rotate(66.4 115 96)" stroke="#000" stroke-width="6"/>
+    <ellipse cx="115" cy="96" rx="6.5" ry="4" transform="rotate(66.4 115 96)" stroke="#e0283f" stroke-width="3"/>
+  </g>
+  <ellipse cx="64" cy="46" rx="34" ry="14" fill="#5a0d14" stroke="#000" stroke-width="3.5"/>
+  <ellipse cx="64" cy="49" rx="27" ry="9.5" fill="#0a0809"/>
+  <path d="M58 6h12v22h10l-16 18l-16-18h10z" fill="#ffffff" stroke="#000" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M30 46L30 68A34 14 0 0 0 98 68L98 46A34 14 0 0 1 30 46Z" fill="#c8102e"/>
+  <path d="M30 46L30 68A34 14 0 0 0 46 79.9L46 57.9A34 14 0 0 1 30 46Z" fill="#8e0b20"/>
+  <path d="M30 46L30 68A34 14 0 0 0 98 68L98 46A34 14 0 0 1 30 46Z" fill="none" stroke="#000" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M74 64Q87 62 92 56" fill="none" stroke="#ff9aa5" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="42" cy="68" r="2.6" fill="#2a2a2e" stroke="#000" stroke-width="1"/>
+  <circle cx="86" cy="68" r="2.6" fill="#2a2a2e" stroke="#000" stroke-width="1"/>
+  <rect x="59" y="64" width="10" height="10" rx="1.5" fill="#2b2b2b" stroke="#000" stroke-width="1.5"/>
+  <circle cx="64" cy="88" r="5.5" fill="none" stroke="#000" stroke-width="4.5"/>
+  <circle cx="64" cy="88" r="5.5" fill="none" stroke="#a6a6ae" stroke-width="2"/>
+</svg>

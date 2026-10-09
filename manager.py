@@ -1,0 +1,456 @@
+import dataclasses
+import gc
+import logging
+import os
+import threading
+import time
+import uuid
+
+import requests
+
+import secure_store
+import video_converter
+from browser_context import BrowserContext
+from history import DownloadHistory
+from enhanced_downloader import EnhancedDownloadTask as DownloadWorker
+from media_handler import MediaHandler
+
+logger = logging.getLogger(__name__)
+
+
+def _file_size(path):
+    try:
+        return os.path.getsize(path)
+    except (OSError, TypeError):
+        return 0
+
+
+def _cookies_to_list(jar):
+    """Cookies de requests como lista simple (para guardarlas cifradas y reanudar más tarde)."""
+    return [{"name": c.name, "value": c.value, "domain": c.domain, "path": c.path, "secure": bool(c.secure)}
+            for c in (jar or [])]
+
+
+def _cookies_from_list(items):
+    jar = requests.cookies.RequestsCookieJar()
+    for cookie in items or []:
+        try:
+            jar.set(cookie["name"], cookie["value"], domain=cookie.get("domain", ""),
+                    path=cookie.get("path", "/"), secure=bool(cookie.get("secure")))
+        except (KeyError, TypeError, AttributeError):
+            continue
+    return jar
+
+
+def _context_from_dict(data):
+    if not isinstance(data, dict):
+        return None
+    names = {f.name for f in dataclasses.fields(BrowserContext)}
+    try:
+        return BrowserContext(**{k: v for k, v in data.items() if k in names})
+    except TypeError:
+        return None
+
+
+class DownloadTask:
+    kind = "file"
+
+    def __init__(self, url, output_file, threads, speed_limit_kbps, manager, headers=None, cookies=None,
+                 max_retries=3, task_id=None, resume_state=None):
+        self.manager = manager
+        self.id = task_id or str(uuid.uuid4())
+        self.url = url
+        self.output_file = output_file
+        self.threads = threads
+        self.speed_limit_kbps = speed_limit_kbps
+        self.progress = 0
+        self.status = "esperando"
+        self.started = False
+
+        # headers/cookies: los del navegador cuando la descarga viene de la extensión
+        # resume_state: avance guardado para continuar donde quedó
+        self.worker = DownloadWorker(
+            self.url,
+            self.output_file,
+            threads=self.threads,
+            speed_limit_kbps=self.speed_limit_kbps,
+            headers=headers,
+            cookies=cookies,
+            max_retries=max_retries,
+            resume_state=resume_state,
+            state_callback=self._save_state
+        )
+
+        # daemon: al salir de Geas las descargas se detienen (quedan "sin terminar")
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _save_state(self, state):
+        # Avance para reanudar aunque se cierre Geas (sin cambiar el "último intento")
+        self.manager.history.update_entry(self.id, touch=False, resume=state, size=state["total_size"])
+
+    def _run(self):
+        self.status = "descargando"
+        try:
+            self.worker.run()
+            self.progress = int((self.worker.progress / self.worker.total_size) * 100) if self.worker.total_size else 0
+            self.status = self.worker.status
+        except Exception as e:
+            self.status = f"error: {e}"
+        # La ruta puede cambiar si el nombre salió del servidor
+        self.output_file = self.worker.output_path
+        fields = {"status": self.status, "output_path": self.output_file,
+                  "size": self.worker.total_size or _file_size(self.output_file)}
+        if self.status == "completado":
+            fields.update(resume=None, secrets=None)  # ya no hacen falta (ni las cookies guardadas)
+        self.manager.history.update_entry(self.id, **fields)
+
+    def start(self):
+        if not self.started:
+            self.started = True
+            self.thread.start()
+
+    def pause(self):
+        self.worker.pause()
+        self.status = "pausado"
+
+    def resume(self):
+        if not self.started:  # "Descargar más tarde": todavía no había empezado
+            self.start()
+            return
+        self.worker.resume()
+        self.status = "descargando"
+
+    def cancel(self):
+        self.worker.cancel()
+        self.status = "cancelado"
+        if not self.started:
+            self.manager.history.update_entry(self.id, status="cancelado")
+
+    def suspend(self):
+        """Al cerrar Geas: se detiene guardando el avance y queda sin terminar en el registro."""
+        self.worker.pause()
+
+
+class YtDownloadTask:
+    """Tarea de descarga para YouTube/Media usando yt-dlp"""
+    kind = "video"
+
+    def __init__(self, url, output_path, format_id, manager, context=None, source=None, convert_h264=False,
+                 task_id=None):
+        self.id = task_id or str(uuid.uuid4())
+        self.url = url
+        self.output_path = output_path
+        self.format_id = format_id
+        self.manager = manager
+        self.context = context  # BrowserContext (cookies del navegador)
+        self.source = source    # URL y cabeceras con las que se analizó el video
+        self.convert_h264 = convert_h264  # convertir AV1/VP9/HEVC a H.264 al terminar
+        self.handler = MediaHandler()
+        self._cancelled = False
+        self._paused = False
+        self.started = False
+
+        self.status = "esperando"
+        self.progress = 0
+        self.downloaded_bytes = 0
+        self.total_bytes = 0
+        self.speed_bps = 0
+        self.eta_seconds = None
+        self.error = None
+
+        self.thread = threading.Thread(target=self._run)
+        self.thread.daemon = True
+
+    def start(self):
+        if not self.started:
+            self.started = True
+            self.status = "descargando"
+            self.thread.start()
+
+    def _on_progress_info(self, d):
+        if d.get('status') == 'downloading':
+            self.downloaded_bytes = d.get('downloaded_bytes') or 0
+            self.total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+            self.speed_bps = d.get('speed') or 0
+            self.eta_seconds = d.get('eta')
+
+    def _on_convert_progress(self, percent):
+        self.progress = int(percent)
+        self.status = f"convirtiendo a H.264 ({int(percent)} %)"
+
+    def _convert_if_needed(self):
+        """Convierte a H.264 si el video quedó en un formato que Windows no abre. Devuelve un aviso o None."""
+        if not (self.convert_h264 and os.path.exists(self.output_path)
+                and video_converter.needs_h264(self.output_path)):
+            return self.handler.notice
+        self.speed_bps, self.eta_seconds = 0, None
+        self._on_convert_progress(0)
+        try:
+            video_converter.convert_to_h264(self.output_path, progress_callback=self._on_convert_progress,
+                                            is_cancelled=lambda: self._cancelled)
+            return None
+        except video_converter.ConversionCancelled:
+            raise Exception("DownloadCancelled")
+        except Exception as e:
+            # La descarga sí terminó: se conserva el video original
+            logger.error(f"No se pudo convertir {self.output_path} a H.264: {e}")
+            return "sin convertir a H.264"
+
+    def _run(self):
+        self.error = None
+        interrupted = False
+        try:
+            def progress_cb(percent):
+                self.progress = int(percent)
+
+            def status_cb(msg):
+                if "MB/s" in msg:
+                    self.status = "descargando"
+                else:
+                    self.status = msg
+
+            self.status = "descargando"
+            self.handler.download_stream(
+                self.url, self.format_id, self.output_path,
+                progress_callback=progress_cb,
+                status_callback=status_cb,
+                check_cancelled_cb=lambda: self._cancelled,
+                context=self.context,
+                source=self.source,
+                progress_info_callback=self._on_progress_info
+            )
+
+            notice = self._convert_if_needed()
+            # Con aviso si el video quedó sin reempaquetar (falta ffmpeg) o sin convertir
+            self.status = f"completado ({notice})" if notice else "completado"
+            self.progress = 100
+            self.speed_bps, self.eta_seconds = 0, None
+            self.manager.history.update_entry(self.id, status="completado", size=_file_size(self.output_path),
+                                              secrets=None)
+
+        except Exception as e:
+            if str(e) == "DownloadCancelled":
+                interrupted = True
+                if self._paused:
+                    self.status = "pausado"
+                else:
+                    self.status = "cancelado"
+                    self.manager.history.update_entry(self.id, status="cancelado")
+            else:
+                self.status = "error"
+                self.error = str(e)
+                self.manager.history.update_entry(self.id, status=f"error: {self.error}")
+        if interrupted:
+            # yt-dlp no cierra su .part al interrumpirlo (queda en el rastro del error) y Windows
+            # no dejaría renombrarlo al reanudar en esta misma sesión: se libera ya
+            gc.collect()
+
+    def pause(self):
+        self._paused = True
+        self._cancelled = True
+
+    def resume(self):
+        if not self.started:  # "Descargar más tarde"
+            self.start()
+            return
+        if self._paused:
+            self._paused = False
+            self._cancelled = False
+            self.thread = threading.Thread(target=self._run)
+            self.thread.daemon = True
+            self.thread.start()
+            self.status = "descargando"
+
+    def cancel(self):
+        self._cancelled = True
+        if not self.started:
+            self.status = "cancelado"
+            self.manager.history.update_entry(self.id, status="cancelado")
+
+    def suspend(self):
+        """Al cerrar Geas: detiene yt-dlp como una pausa; al reanudar sigue desde su .part."""
+        self.pause()
+
+
+class DownloadManager:
+    def __init__(self):
+        self.tasks = {}
+        self.history = DownloadHistory()
+
+    def add_download(self, url, output_file, threads=4, speed_limit_kbps=0, headers=None, cookies=None,
+                     start=True, max_retries=3):
+        task = DownloadTask(url, output_file, threads, speed_limit_kbps, self, headers=headers, cookies=cookies,
+                            max_retries=max_retries)
+        self.tasks[task.id] = task
+        # Cabeceras y cookies del navegador, cifradas: para reanudar después de cerrar Geas
+        secrets = {k: v for k, v in (("headers", headers), ("cookies", _cookies_to_list(cookies))) if v}
+        self.history.add_entry(url, output_file, "descargando" if start else "en espera",
+                               entry_id=task.id, kind=task.kind, secrets=secure_store.protect(secrets))
+        if start:
+            task.start()
+        return task.id
+
+    def add_yt_download(self, url, output_file, format_id, context=None, source=None, convert_h264=False,
+                        start=True):
+        task = YtDownloadTask(url, output_file, format_id, self, context=context, source=source,
+                              convert_h264=convert_h264)
+        self.tasks[task.id] = task
+        secrets = {k: v for k, v in (("context", dataclasses.asdict(context) if context else None),
+                                     ("source", source)) if v}
+        self.history.add_entry(url, output_file, "descargando" if start else "en espera",
+                               entry_id=task.id, kind=task.kind, secrets=secure_store.protect(secrets),
+                               video={"format_id": format_id, "convert_h264": bool(convert_h264)})
+        if start:
+            task.start()
+        return task.id
+
+    def pause_download(self, task_id):
+        if task_id in self.tasks:
+            self.tasks[task_id].pause()
+
+    def resume_download(self, task_id):
+        if task_id in self.tasks:
+            self.tasks[task_id].resume()
+
+    def cancel_download(self, task_id):
+        if task_id in self.tasks:
+            self.tasks[task_id].cancel()
+
+    def is_active(self, task_id):
+        """True si la descarga está en curso (ni terminada, ni con error, ni cancelada)."""
+        status = (self.get_status(task_id) or {}).get("status", "")
+        return not status.startswith(("completado", "error", "cancelado"))
+
+    def remove_task(self, task_id):
+        """Quita la tarea de la sesión (cancelándola si sigue en curso)."""
+        if task_id in self.tasks:
+            if self.is_active(task_id):
+                self.tasks[task_id].cancel()
+            del self.tasks[task_id]
+
+    def entry_credentials(self, entry_id):
+        """(cabeceras, cookies) guardadas con la descarga, o (None, None)."""
+        entry = self.history.get_entry(entry_id) or {}
+        secrets = secure_store.unprotect(entry.get("secrets")) or {}
+        cookies = _cookies_from_list(secrets.get("cookies"))
+        return secrets.get("headers") or None, cookies if len(cookies) else None
+
+    def can_resume(self, entry_id):
+        """Hay datos para continuar la descarga donde quedó (archivos: siempre; videos: si se guardó el formato)."""
+        entry = self.history.get_entry(entry_id)
+        if not entry or entry.get("status", "").startswith("completado"):
+            return False
+        return entry.get("kind") == "file" or (entry.get("kind") == "video" and bool(entry.get("video")))
+
+    def resume_entry(self, entry_id, threads=4, speed_limit_kbps=0, max_retries=3):
+        """
+        Continúa una descarga que quedó a medias (al cerrar Geas, por un error o
+        cancelada) desde lo ya descargado, con las cookies y cabeceras con que
+        empezó. Si el archivo cambió en el servidor, empieza de nuevo.
+        Devuelve False si no hay datos para hacerlo o si ya está en curso.
+        """
+        if not self.can_resume(entry_id):
+            return False
+        old = self.tasks.get(entry_id)
+        if old is not None:
+            if self.is_active(entry_id):
+                return False
+            if old.thread.is_alive():
+                old.thread.join(5)  # la tarea anterior (recién cancelada) suelta sus archivos
+        entry = self.history.get_entry(entry_id)
+        secrets = secure_store.unprotect(entry.get("secrets")) or {}
+        if entry["kind"] == "file":
+            task = DownloadTask(entry["url"], entry["output_path"], threads, speed_limit_kbps, self,
+                                headers=secrets.get("headers") or None,
+                                cookies=_cookies_from_list(secrets.get("cookies")), max_retries=max_retries,
+                                task_id=entry_id, resume_state=entry.get("resume"))
+        else:
+            video = entry["video"]
+            task = YtDownloadTask(entry["url"], entry["output_path"], video.get("format_id"), self,
+                                  context=_context_from_dict(secrets.get("context")), source=secrets.get("source"),
+                                  convert_h264=bool(video.get("convert_h264")), task_id=entry_id)
+        self.tasks[entry_id] = task
+        self.history.update_entry(entry_id, status="descargando", auto_resume=None)
+        task.start()
+        return True
+
+    def pending_auto_resume(self):
+        """Descargas que se detuvieron al reiniciar Geas y deben continuar al abrirla."""
+        return [e["id"] for e in self.history.get_history() if e.get("auto_resume")]
+
+    def shutdown(self, resume_on_start=False):
+        """
+        Al salir de Geas: detiene las descargas en curso guardando su avance para
+        reanudarlas al volver (con resume_on_start, automáticamente al abrir).
+        """
+        stopping = []
+        for task_id, task in list(self.tasks.items()):
+            status = (self.get_status(task_id) or {}).get("status", "")
+            if status in ("descargando", "obteniendo información", "esperando") or status.startswith("convirtiendo"):
+                task.suspend()
+                stopping.append(task)
+                if resume_on_start:
+                    self.history.update_entry(task_id, touch=False, auto_resume=True)
+        # yt-dlp se detiene en su siguiente aviso de progreso: esperarlo deja su .part coherente
+        deadline = time.time() + 5
+        for task in stopping:
+            if isinstance(task, YtDownloadTask) and task.thread.is_alive():
+                task.thread.join(max(0.0, deadline - time.time()))
+
+    def get_status(self, task_id):
+        task = self.tasks.get(task_id)
+        if not task:
+            return None
+
+        # Handle YtDownloadTask
+        if isinstance(task, YtDownloadTask):
+            # Con el motivo, igual que las descargas directas ("error: ...")
+            status = f"error: {task.error}" if task.status == "error" and task.error else task.status
+            if not task.started and status == "esperando":
+                status = "en espera"
+            total = task.total_bytes
+            if status.startswith("completado"):
+                total = _file_size(task.output_path) or total  # tamaño final (tras convertir)
+            return {
+                "id": task.id,
+                "kind": task.kind,
+                "url": task.url,
+                "output": task.output_path,
+                "status": status,
+                "progress": task.progress,
+                "downloaded": task.downloaded_bytes,
+                "total": total,
+                "speed_bps": task.speed_bps,
+                "eta_seconds": task.eta_seconds,
+                "resumable": True,
+                "segments": [],
+                "connections": [],
+            }
+
+        # Handle EnhancedDownloadTask (Standard)
+        worker = task.worker
+        progress = 0
+        if worker.total_size > 0:
+            progress = int((worker.progress / worker.total_size) * 100)
+        status = worker.status if task.started else "en espera"
+        active = status not in ("completado", "cancelado", "pausado") and not status.startswith("error")
+        segments, connections = worker.get_segments()
+
+        return {
+            "id": task.id,
+            "kind": task.kind,
+            "url": task.url,
+            "output": worker.output_path,
+            "status": status,
+            "progress": progress,
+            "downloaded": worker.progress,
+            "total": worker.total_size,
+            "speed_bps": worker.download_speed if active else 0,
+            "eta_seconds": worker.eta if active and worker.eta > 0 else None,
+            "resumable": worker.resumable,
+            "segments": segments,
+            "connections": connections,
+        }
+
+    def list_all(self):
+        return [self.get_status(tid) for tid in list(self.tasks)]

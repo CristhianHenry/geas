@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 320px;
+      padding: 15px;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #3e3e42;
+      padding-bottom: 10px;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #007acc;
+    }
+
+    .version {
+      font-size: 11px;
+      color: #888;
+    }
+
+    .status {
+      display: flex;
+      align-items: flex-start;
+      background-color: #252526;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
+      border: 1px solid #3e3e42;
+    }
+
+    .status-dot {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      margin: 4px 10px 0 0;
+      border-radius: 50%;
+      background-color: #888;
+    }
+
+    .status-dot.ok {
+      background-color: #4caf50;
+      box-shadow: 0 0 5px #4caf50;
+    }
+
+    .status-dot.warn {
+      background-color: #ffb300;
+      box-shadow: 0 0 5px #ffb300;
+    }
+
+    .status-dot.error {
+      background-color: #f44336;
+      box-shadow: 0 0 5px #f44336;
+    }
+
+    .status-title {
+      font-size: 13px;
+    }
+
+    .status-detail {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 3px;
+      word-break: break-word;
+    }
+
+    label.option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+
+    h4 {
+      font-size: 12px;
+      color: #ccc;
+      margin: 14px 0 8px;
+    }
+
+    button {
+      background: #007acc;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #1a8ad4;
+    }
+
+    button:disabled {
+      background: #3e3e42;
+      color: #888;
+      cursor: default;
+    }
+
+    .full {
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    #launchApp {
+      margin-top: 8px;
+    }
+
+    .media-list {
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .media-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #252526;
+      border: 1px solid #3e3e42;
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+    }
+
+    .media-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .media-name {
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .media-meta {
+      font-size: 11px;
+      color: #888;
+    }
+
+    .empty {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h3 style="display: flex; align-items: center; gap: 8px;"><img src="icons/geas-32.png" width="22" height="22" alt="">Geas</h3>
+    <span class="version" id="version"></span>
+  </div>
+
+  <div class="status">
+    <div class="status-dot" id="statusDot"></div>
+    <div>
+      <div class="status-title" id="statusTitle">Comprobando conexión...</div>
+      <div class="status-detail" id="statusDetail"></div>
+      <button id="launchApp" class="hidden">Iniciar Geas</button>
+    </div>
+  </div>
+
+  <label class="option"><input type="checkbox" id="interceptDownloads"> Capturar las descargas del navegador</label>
+  <label class="option"><input type="checkbox" id="showVideoButtons"> Mostrar el botón "Descargar video" en los videos</label>
+
+  <button id="downloadPage" class="full">⬇ Descargar video de esta página</button>
+
+  <h4 id="mediaTitle">Medios detectados en esta pestaña</h4>
+  <div class="media-list" id="mediaList"></div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+
+</html>
