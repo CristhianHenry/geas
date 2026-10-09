@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import logging
 from typing import Optional, Callable
 
+from version import __version__
+
 # Solo se aceptan peticiones dirigidas a esta máquina (protege contra DNS rebinding)
 ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 # Orígenes de extensiones; el host nativo (Python) no envía Origin
@@ -88,7 +90,7 @@ class GeasServer:
 
     def _check_server(self):
         """Endpoint para verificar que el servidor está corriendo"""
-        return jsonify({"status": "running", "app": "Geas", "version": "1.2"}), 200
+        return jsonify({"status": "running", "app": "Geas", "version": __version__}), 200
 
     def _get_status(self):
         """Endpoint para obtener el estado del gestor de descargas"""

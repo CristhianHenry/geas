@@ -16,6 +16,7 @@ from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
 import network
+import paths
 from browser_context import BrowserContext, is_http_url
 
 YOUTUBE_DOMAINS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
@@ -114,7 +115,7 @@ def find_ffmpeg() -> Optional[str]:
     if found:
         return os.path.dirname(found)
     executable = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
-    candidates = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg", "bin")]
+    candidates = [os.path.join(paths.APP_DIR, "ffmpeg", "bin")]
     if os.name == "nt":
         local = os.environ.get("LOCALAPPDATA", "")
         candidates += _registry_path_dirs()

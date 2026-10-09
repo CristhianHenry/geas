@@ -17,9 +17,13 @@ from PySide6.QtGui import QAction, QActionGroup, QColor, QLinearGradient, QKeySe
 
 import icons
 import network
+import paths
 import power_actions
 import ytdlp_updater
 from ytdlp_dialog import YtDlpUpdateDialog, VersionCheckThread
+import app_updater
+from app_update_dialog import AppUpdateDialog, ReleaseCheckThread
+from version import __version__
 from manager import DownloadManager
 from settings import AppSettings
 from scheduler import Scheduler
@@ -124,7 +128,7 @@ class DownloadApp(QMainWindow):
         super().__init__()
 
         # Configurar logging: también en geas.log, porque cuando la abre el navegador no hay consola
-        log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "geas.log")
+        log_file = paths.data("geas.log")
         log_handlers = [RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=1, encoding="utf-8")]
         if sys.stderr:
             log_handlers.append(logging.StreamHandler())
@@ -147,6 +151,8 @@ class DownloadApp(QMainWindow):
         self.ytdlp_dialog = None
         self.ytdlp_restart_pending = False  # yt-dlp se actualizó: falta reiniciar
         self._ytdlp_check = None
+        self._app_check = None
+        self.app_release = None       # versión nueva de Geas encontrada al abrir
         self.finish_action = power_actions.NOTHING  # qué hacer al terminar todas las descargas
         self._finish_armed = False    # hubo descargas en curso después de elegir la acción
         self._finish_pending = False  # la cuenta regresiva está abierta
@@ -189,6 +195,7 @@ class DownloadApp(QMainWindow):
                 else:
                     self.manager.history.update_entry(entry_id, touch=False, auto_resume=None)
             self._check_ytdlp_updates()
+            self._check_app_updates()
 
         except Exception as e:
             self.logger.error(f"Error al inicializar la aplicación: {e}")
@@ -206,7 +213,7 @@ class DownloadApp(QMainWindow):
         palette.setColor(QPalette.Highlight, QColor("#cce8ff"))
         palette.setColor(QPalette.HighlightedText, QColor("#000000"))
         app.setPalette(palette)
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style.qss")
+        path = paths.resource("style.qss")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 # En toda la aplicación: también en las ventanas sin padre (progreso, navegador)
@@ -249,6 +256,9 @@ class DownloadApp(QMainWindow):
         self.act_update_ytdlp = self._action("redownload", "Actualizar yt-dlp…", self.show_ytdlp_updater,
                                              tip="Actualizar el componente que reconoce los videos de las páginas")
         self.act_about = self._action("app", "Acerca de Geas", self.show_about)
+        self.act_app_update = self._action("redownload", "Buscar actualizaciones de Geas…",
+                                           lambda: self.show_app_updater())
+        self.act_app_update.setVisible(app_updater.enabled())
         self.act_categories = QAction("Categorías", self, checkable=True, checked=True)
         self.finish_group = QActionGroup(self)  # "Al terminar las descargas": una opción a la vez
         self.finish_actions = {}
@@ -289,7 +299,7 @@ class DownloadApp(QMainWindow):
         view.addActions([self.act_browser, self.act_log])
 
         help_menu = bar.addMenu("A&yuda")
-        help_menu.addAction(self.act_update_ytdlp)
+        help_menu.addActions([self.act_app_update, self.act_update_ytdlp])
         help_menu.addSeparator()
         help_menu.addAction(self.act_about)
 
@@ -373,6 +383,11 @@ class DownloadApp(QMainWindow):
         self.ytdlp_label.setTextFormat(Qt.RichText)
         self.ytdlp_label.linkActivated.connect(lambda _: self.show_ytdlp_updater())
         self.statusBar().addPermanentWidget(self.ytdlp_label)
+        self.app_update_label = QLabel()
+        self.app_update_label.setTextFormat(Qt.RichText)
+        self.app_update_label.linkActivated.connect(lambda _: self.show_app_updater(self.app_release))
+        self.app_update_label.hide()
+        self.statusBar().addPermanentWidget(self.app_update_label)
         self.ffmpeg_label = QLabel()
         self.statusBar().addPermanentWidget(self.ffmpeg_label)
         self._update_ffmpeg_label()
@@ -880,6 +895,44 @@ class DownloadApp(QMainWindow):
         self._update_ytdlp_label()
         self.notify("yt-dlp actualizado", f"Versión {version}. Reinicia Geas para usarla.")
 
+    def _check_app_updates(self):
+        """Una vez al día, si Geas está instalada, comprueba en segundo plano si hay una versión nueva."""
+        if not (app_updater.enabled() and self.app_settings.get("check_app_updates")):
+            return
+        try:
+            last = datetime.fromisoformat(self.app_settings.get("app_last_check") or "")
+            if datetime.now() - last < timedelta(days=1):
+                return
+        except ValueError:
+            pass
+        self._app_check = ReleaseCheckThread(self)
+        self._app_check.checked.connect(self._on_app_checked)
+        self._app_check.start()
+
+    def _on_app_checked(self, release, error):
+        if error:
+            self.logger.info(f"No se pudo comprobar si hay una versión nueva de Geas: {error}")
+            return
+        self.app_settings.set("app_last_check", datetime.now().isoformat(timespec="seconds"))
+        if app_updater.is_update(release):
+            self.app_release = release
+            self.app_update_label.setText(f'<a href="#">Geas {release["version"]} disponible</a>')
+            self.app_update_label.show()
+            self.log_message(f"Hay una versión nueva de Geas ({release['version']}): Ayuda → Buscar actualizaciones")
+
+    def show_app_updater(self, release=None):
+        dialog = AppUpdateDialog(self, release)
+        dialog.install_requested.connect(self.install_app_update)
+        dialog.exec()
+
+    def install_app_update(self, installer):
+        """Detiene las descargas (siguen solas al volver), abre el instalador y cierra Geas para que la reemplace."""
+        self.log_message(f"Instalando la actualización: {os.path.basename(installer)}")
+        self.manager.shutdown(resume_on_start=True)
+        app_updater.run_installer(installer)
+        self._restarting = True  # ya se preguntó y se detuvieron
+        self.force_quit()
+
     def _check_ytdlp_updates(self):
         """Una vez al día, comprueba en segundo plano si hay una versión nueva de yt-dlp."""
         if not self.app_settings.get("check_ytdlp_updates"):
@@ -934,9 +987,9 @@ class DownloadApp(QMainWindow):
             if reply != QMessageBox.Yes:
                 return
         self.manager.shutdown(resume_on_start=True)
-        folder = os.path.dirname(os.path.abspath(__file__))
-        QProcess.startDetached(sys.executable, [os.path.join(folder, "main.py"), "--restart-from", str(os.getpid())],
-                               folder)
+        # Instalada, sys.executable es Geas.exe; desde el código, Python con main.py
+        script = [] if paths.FROZEN else [os.path.join(paths.APP_DIR, "main.py")]
+        QProcess.startDetached(sys.executable, script + ["--restart-from", str(os.getpid())], paths.APP_DIR)
         self._restarting = True
         self.force_quit()
 
@@ -967,7 +1020,7 @@ class DownloadApp(QMainWindow):
 
     def show_about(self):
         QMessageBox.about(self, "Acerca de Geas",
-                          "<b>Geas Download Manager</b> · <i>Grab Everything At Speed</i><br>"
+                          f"<b>Geas Download Manager {__version__}</b> · <i>Grab Everything At Speed</i><br>"
                           "Gestor de descargas con integración para Chrome y Edge.<br><br>"
                           "Descargas multi-conexión, videos con yt-dlp (HLS/DASH), conversión a H.264 "
                           "y captura de descargas del navegador.")

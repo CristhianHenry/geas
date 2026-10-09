@@ -2,9 +2,19 @@
 import os
 import sys
 
-# Los recursos (style.qss, iconos, historial) se buscan junto al programa,
-# aunque lo inicie el navegador o un acceso directo desde otra carpeta
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+import paths
+import ytdlp_updater
+
+# Los archivos relativos se buscan en la carpeta de datos, aunque lo inicie el
+# navegador o un acceso directo desde otra carpeta
+os.chdir(paths.DATA_DIR)
+# Instalada: el yt-dlp descargado con "Actualizar yt-dlp" se usa en vez del incluido
+ytdlp_updater.use_downloaded_copy()
+
+if sys.platform == "win32":
+    # Icono y nombre propios en la barra de tareas y en los avisos de Windows (no los de Python)
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Geas.DownloadManager")
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTranslator, QLibraryInfo

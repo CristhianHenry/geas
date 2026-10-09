@@ -5,6 +5,8 @@ from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
+import paths
+
 _BLUE_GRADIENT = ('<linearGradient id="g" x1="0" y1="0" x2="0" y2="1">'
                   '<stop offset="0" stop-color="#4aa3f5"/><stop offset="1" stop-color="#1c64c2"/></linearGradient>')
 _GLOBE = ('<defs><radialGradient id="g" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#7cc4ff"/>'
@@ -103,7 +105,7 @@ _SVG = {
 }
 
 _cache = {}
-_BRANDING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "branding")
+_BRANDING = paths.resource("branding")
 
 
 def _render(renderer, sizes, result):

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+import app_updater
 import icons
 import network
 import secure_store
@@ -59,7 +60,10 @@ class OptionsDialog(QDialog):
         self.clipboard = self._check("Detectar enlaces de descarga copiados al portapapeles", "clipboard_monitor")
         self.notifications = self._check("Avisar en la bandeja del sistema al terminar una descarga", "show_notifications")
         self.tray = self._check("Al cerrar la ventana, seguir en la bandeja del sistema", "minimize_to_tray")
-        for widget in (self.auto_start, self.show_progress, self.clipboard, self.notifications, self.tray):
+        self.check_app = self._check("Buscar una versión nueva de Geas una vez al día", "check_app_updates")
+        self.check_app.setVisible(app_updater.enabled())  # solo la versión instalada se actualiza sola
+        for widget in (self.auto_start, self.show_progress, self.clipboard, self.notifications, self.tray,
+                       self.check_app):
             layout.addWidget(widget)
         layout.addStretch()
         return page
@@ -271,6 +275,7 @@ class OptionsDialog(QDialog):
             "minimize_to_tray": self.tray.isChecked(),
             "convert_to_h264": self.convert.isChecked(),
             "check_ytdlp_updates": self.check_ytdlp.isChecked(),
+            "check_app_updates": self.check_app.isChecked(),
             "proxy_mode": (network.PROXY_MANUAL if self.proxy_manual.isChecked()
                            else network.PROXY_NONE if self.proxy_none.isChecked() else network.PROXY_SYSTEM),
             "proxy_url": secure_store.protect(network.normalize_proxy(self.proxy_url.text())) or "",

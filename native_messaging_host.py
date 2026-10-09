@@ -24,7 +24,9 @@ from pathlib import Path
 
 import requests
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+import paths
+
+SCRIPT_DIR = Path(paths.APP_DIR)
 API_BASE = "http://127.0.0.1:5000"
 STARTUP_TIMEOUT = 30  # segundos de espera a que Geas levante su API
 LAUNCH_LOCK = Path(tempfile.gettempdir()) / "geas_launch.lock"
@@ -34,7 +36,7 @@ MAX_MESSAGE_SIZE = 64 * 1024 * 1024  # límite del protocolo de Chrome hacia el 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[RotatingFileHandler(SCRIPT_DIR / "native_host.log", maxBytes=1_000_000,
+    handlers=[RotatingFileHandler(paths.data("native_host.log"), maxBytes=1_000_000,
                                   backupCount=1, encoding="utf-8")]
 )
 
@@ -90,11 +92,25 @@ def app_is_running():
         return False
 
 
-def launch_app():
-    """Inicia Geas sin consola y separada del navegador."""
+def app_command():
+    """Instalada: Geas.exe junto a este host. Desde el código: Python (sin consola) con main.py."""
+    if paths.FROZEN:
+        exe = SCRIPT_DIR / "Geas.exe"
+        if not exe.exists():
+            raise RuntimeError(f"Geas.exe no encontrado en {SCRIPT_DIR}")
+        return [str(exe)]
     main_script = SCRIPT_DIR / "main.py"
     if not main_script.exists():
         raise RuntimeError(f"main.py no encontrado en {SCRIPT_DIR}")
+    python = Path(sys.executable)
+    if sys.platform == 'win32' and python.with_name("pythonw.exe").exists():
+        python = python.with_name("pythonw.exe")
+    return [str(python), str(main_script)]
+
+
+def launch_app():
+    """Inicia Geas sin consola y separada del navegador."""
+    command = app_command()
 
     # Si llegan varias descargas a la vez, solo la primera abre la aplicación
     if LAUNCH_LOCK.exists() and time.time() - LAUNCH_LOCK.stat().st_mtime < STARTUP_TIMEOUT:
@@ -102,24 +118,19 @@ def launch_app():
         return
     LAUNCH_LOCK.touch()
 
-    python = Path(sys.executable)
     # Sin heredar los pipes del navegador: Geas sigue viva cuando el host termina
     options = dict(cwd=str(SCRIPT_DIR), stdin=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
 
     if sys.platform == 'win32':
-        pythonw = python.with_name("pythonw.exe")
-        if pythonw.exists():
-            python = pythonw
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
         try:
             # Fuera del "job" del navegador para que no se cierre junto con él
-            subprocess.Popen([str(python), str(main_script)],
-                             creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **options)
+            subprocess.Popen(command, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **options)
         except OSError:
-            subprocess.Popen([str(python), str(main_script)], creationflags=flags, **options)
+            subprocess.Popen(command, creationflags=flags, **options)
     else:
-        subprocess.Popen([str(python), str(main_script)], start_new_session=True, **options)
+        subprocess.Popen(command, start_new_session=True, **options)
 
 
 def ensure_app_running():

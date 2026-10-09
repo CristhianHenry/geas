@@ -8,7 +8,9 @@ import time
 import uuid
 from datetime import datetime
 
-HISTORY_FILE = "download_history.json"
+import paths
+
+HISTORY_FILE = paths.data("download_history.json")
 
 
 def _now():

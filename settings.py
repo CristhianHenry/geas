@@ -2,6 +2,8 @@
 import json
 import os
 
+import paths
+
 DEFAULT_CONFIG = {
     "default_download_folder": os.path.expanduser("~/Downloads"),
     "default_threads": 4,
@@ -18,13 +20,15 @@ DEFAULT_CONFIG = {
     "clipboard_monitor": False,     # detectar enlaces copiados
     "convert_to_h264": True,        # convertir AV1/VP9/HEVC a H.264 al terminar (requiere ffmpeg)
     "check_ytdlp_updates": True,    # comprobar una vez al día si hay una versión nueva de yt-dlp
+    "check_app_updates": True,      # Geas instalada: buscar una versión nueva una vez al día
+    "app_last_check": "",           # fecha de la última búsqueda
     "ytdlp_last_check": "",         # fecha de la última comprobación
     "ytdlp_latest_seen": ""         # última versión publicada que se vio
 }
 
 BOOLEAN_KEYS = {key for key, value in DEFAULT_CONFIG.items() if isinstance(value, bool)}
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+CONFIG_PATH = paths.data("config.json")
 
 
 class AppSettings:
