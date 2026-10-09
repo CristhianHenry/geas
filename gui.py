@@ -16,6 +16,7 @@ from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess
 from PySide6.QtGui import QAction, QActionGroup, QColor, QLinearGradient, QKeySequence, QBrush, QPalette
 
 import icons
+import network
 import power_actions
 import ytdlp_updater
 from ytdlp_dialog import YtDlpUpdateDialog, VersionCheckThread
@@ -151,6 +152,7 @@ class DownloadApp(QMainWindow):
 
         try:
             self.app_settings = AppSettings()
+            network.apply_settings(self.app_settings)  # proxy y usuarios por sitio, antes de cualquier conexión
             self.manager = DownloadManager(max_active=self.app_settings.get("max_simultaneous_downloads"))
             self.scheduler = Scheduler(self.manager)
 
@@ -851,6 +853,7 @@ class DownloadApp(QMainWindow):
         dialog = OptionsDialog(self.app_settings, self, update_ytdlp=self.show_ytdlp_updater)
         if dialog.exec() == QDialog.Accepted:
             self.manager.set_max_active(self.app_settings.get("max_simultaneous_downloads"))
+            network.apply_settings(self.app_settings)
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
             self._update_ffmpeg_label()
             self.log_message("Opciones actualizadas")

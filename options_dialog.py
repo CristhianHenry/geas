@@ -1,13 +1,17 @@
 # options_dialog.py - Opciones de Geas (pestañas como en IDM)
 import os
+from urllib.parse import urlparse
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget, QWidget, QCheckBox,
-    QSpinBox, QLineEdit, QPushButton, QLabel, QFileDialog, QMessageBox, QDialogButtonBox
+    QSpinBox, QLineEdit, QPushButton, QLabel, QFileDialog, QMessageBox, QDialogButtonBox,
+    QGroupBox, QRadioButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt
 
 import icons
+import network
+import secure_store
 import ytdlp_updater
 from media_handler import find_ffmpeg
 
@@ -25,6 +29,7 @@ class OptionsDialog(QDialog):
         tabs = QTabWidget()
         tabs.addTab(self._general_tab(), "General")
         tabs.addTab(self._connection_tab(), "Conexión")
+        tabs.addTab(self._proxy_tab(), "Proxy y sitios")
         tabs.addTab(self._save_tab(), "Guardar en")
         tabs.addTab(self._video_tab(), "Video")
 
@@ -87,6 +92,107 @@ class OptionsDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
         return page
+
+    def _proxy_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        proxy_box = QGroupBox("Proxy")
+        proxy_layout = QVBoxLayout(proxy_box)
+        self.proxy_system = QRadioButton("Usar el proxy de Windows (recomendado)")
+        self.proxy_none = QRadioButton("Conectar directo, sin proxy")
+        self.proxy_manual = QRadioButton("Usar este proxy:")
+        self.proxy_url = QLineEdit(secure_store.unprotect(self.settings.get("proxy_url")) or "")
+        self.proxy_url.setPlaceholderText("http://servidor:puerto   o   socks5://servidor:puerto")
+        mode = self.settings.get("proxy_mode")
+        {network.PROXY_NONE: self.proxy_none, network.PROXY_MANUAL: self.proxy_manual}.get(
+            mode, self.proxy_system).setChecked(True)
+        self.proxy_url.setEnabled(self.proxy_manual.isChecked())
+        self.proxy_manual.toggled.connect(self.proxy_url.setEnabled)
+        manual_row = QHBoxLayout()
+        manual_row.addWidget(self.proxy_manual)
+        manual_row.addWidget(self.proxy_url, 1)
+        proxy_hint = QLabel("Con usuario: http://usuario:contraseña@servidor:puerto. Vale para las descargas, "
+                            "los videos y la comprobación de versiones.")
+        proxy_hint.setObjectName("Hint")
+        proxy_hint.setWordWrap(True)
+        for widget in (self.proxy_system, self.proxy_none):
+            proxy_layout.addWidget(widget)
+        proxy_layout.addLayout(manual_row)
+        proxy_layout.addWidget(proxy_hint)
+        layout.addWidget(proxy_box)
+
+        logins_box = QGroupBox("Usuarios por sitio")
+        logins_layout = QVBoxLayout(logins_box)
+        self.logins = [{"site": item.get("site", ""), "user": item.get("user", ""),
+                        "password": secure_store.unprotect(item.get("password")) or ""}
+                       for item in self.settings.get("site_logins") or []]
+        self.logins_table = QTableWidget(0, 3)
+        self.logins_table.setHorizontalHeaderLabels(["Sitio", "Usuario", "Contraseña"])
+        self.logins_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.logins_table.verticalHeader().setVisible(False)
+        self.logins_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.logins_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.logins_table.setMinimumHeight(110)
+        self._fill_logins()
+        logins_layout.addWidget(self.logins_table)
+        row = QHBoxLayout()
+        add_button = QPushButton("Añadir…")
+        add_button.clicked.connect(self.add_login)
+        remove_button = QPushButton("Quitar")
+        remove_button.clicked.connect(self.remove_login)
+        row.addWidget(add_button)
+        row.addWidget(remove_button)
+        row.addStretch()
+        logins_layout.addLayout(row)
+        logins_hint = QLabel("Geas los usa cuando el servidor de una descarga pide usuario y contraseña "
+                             "(autenticación HTTP básica); valen también para los subdominios. Se guardan "
+                             "cifrados con tu usuario de Windows.")
+        logins_hint.setObjectName("Hint")
+        logins_hint.setWordWrap(True)
+        logins_layout.addWidget(logins_hint)
+        layout.addWidget(logins_box)
+        return page
+
+    def _fill_logins(self):
+        self.logins_table.setRowCount(len(self.logins))
+        for row, login in enumerate(self.logins):
+            for column, text in enumerate((login["site"], login["user"], "•" * 8 if login["password"] else "")):
+                self.logins_table.setItem(row, column, QTableWidgetItem(text))
+
+    def add_login(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Usuario para un sitio")
+        dialog.setWindowFlags(dialog.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        form = QFormLayout(dialog)
+        site, user, password = QLineEdit(), QLineEdit(), QLineEdit()
+        site.setPlaceholderText("ejemplo.com")
+        password.setEchoMode(QLineEdit.Password)
+        form.addRow("Sitio:", site)
+        form.addRow("Usuario:", user)
+        form.addRow("Contraseña:", password)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Aceptar")
+        buttons.button(QDialogButtonBox.Cancel).setText("Cancelar")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        text = site.text().strip()
+        host = (urlparse(text if "://" in text else "http://" + text).hostname or "").lower()  # admite una URL
+        if not host or not user.text().strip():
+            QMessageBox.warning(self, "Opciones", "Escribe el sitio y el usuario.")
+            return
+        self.logins = [login for login in self.logins if login["site"] != host]
+        self.logins.append({"site": host, "user": user.text().strip(), "password": password.text()})
+        self._fill_logins()
+
+    def remove_login(self):
+        rows = sorted({index.row() for index in self.logins_table.selectedIndexes()}, reverse=True)
+        for row in rows:
+            del self.logins[row]
+        self._fill_logins()
 
     def _save_tab(self):
         page = QWidget()
@@ -165,7 +271,15 @@ class OptionsDialog(QDialog):
             "minimize_to_tray": self.tray.isChecked(),
             "convert_to_h264": self.convert.isChecked(),
             "check_ytdlp_updates": self.check_ytdlp.isChecked(),
+            "proxy_mode": (network.PROXY_MANUAL if self.proxy_manual.isChecked()
+                           else network.PROXY_NONE if self.proxy_none.isChecked() else network.PROXY_SYSTEM),
+            "proxy_url": secure_store.protect(network.normalize_proxy(self.proxy_url.text())) or "",
+            "site_logins": [{"site": login["site"], "user": login["user"],
+                             "password": secure_store.protect(login["password"]) or ""} for login in self.logins],
         }
+        if values["proxy_mode"] == network.PROXY_MANUAL and not self.proxy_url.text().strip():
+            QMessageBox.warning(self, "Opciones", "Escribe la dirección del proxy o elige otra opción.")
+            return
         try:
             for key, value in values.items():
                 self.settings.set(key, value)

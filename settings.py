@@ -8,6 +8,9 @@ DEFAULT_CONFIG = {
     "max_simultaneous_downloads": 3,  # las demás esperan en la cola
     "download_speed_limit_kbps": 0,  # 0 = sin límite
     "auto_retry_count": 3,
+    "proxy_mode": "sistema",        # "sistema", "ninguno" o "manual"
+    "proxy_url": "",                # cifrado (puede llevar usuario y contraseña)
+    "site_logins": [],              # [{"site", "user", "password" (cifrada)}]
     "auto_start_downloads": True,
     "minimize_to_tray": False,
     "show_notifications": True,
@@ -131,6 +134,11 @@ class AppSettings:
             if threads < 1 or threads > 16:
                 raise ValueError("Los hilos deben estar entre 1 y 16")
             return threads
+
+        elif key == "proxy_mode":
+            if value not in ("sistema", "ninguno", "manual"):
+                raise ValueError(f"Modo de proxy desconocido: {value}")
+            return value
 
         elif key == "max_simultaneous_downloads":
             count = int(value)

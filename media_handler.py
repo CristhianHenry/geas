@@ -15,6 +15,7 @@ import yt_dlp
 from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
+import network
 from browser_context import BrowserContext, is_http_url
 
 YOUTUBE_DOMAINS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
@@ -125,6 +126,13 @@ def find_ffmpeg() -> Optional[str]:
         if folder and os.path.isfile(os.path.join(folder, executable)):
             return folder
     return None
+
+
+def _apply_proxy(ydl_opts):
+    """El proxy elegido en Opciones (sin él, yt-dlp usa el del sistema)."""
+    proxy = network.ytdlp_proxy()
+    if proxy is not None:
+        ydl_opts['proxy'] = proxy
 
 
 @functools.lru_cache(maxsize=1)
@@ -338,6 +346,7 @@ class MediaHandler:
             'http_headers': headers,
             'socket_timeout': 20,
         }
+        _apply_proxy(ydl_opts)
         if impersonate:
             ydl_opts['impersonate'] = ImpersonateTarget('chrome')
         with (cookie_context.cookie_file() if cookie_context else nullcontext()) as cookiefile:
@@ -611,6 +620,7 @@ class MediaHandler:
             # Opciones para asegurar mejor compatibilidad
             'merge_output_format': 'mp4',  # Preferir MP4 al mezclar
         }
+        _apply_proxy(ydl_opts)
         # Con ffmpeg, yt-dlp reempaqueta los HLS en un MP4 normal (con índice: se puede adelantar)
         ffmpeg_dir = find_ffmpeg()
         if ffmpeg_dir:

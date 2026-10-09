@@ -11,6 +11,7 @@ from urllib.parse import urlparse, unquote
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+import network
 from browser_context import DEFAULT_USER_AGENT
 
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(1, 10)} | {f"LPT{i}" for i in range(1, 10)}
@@ -129,6 +130,7 @@ def url_probe(url: str, headers: Dict = None, cookies=None, timeout: int = 15) -
     session = requests.Session()
     session.headers.update({'User-Agent': DEFAULT_USER_AGENT, 'Accept-Encoding': 'identity'})
     session.headers.update(headers or {})
+    session.auth = network.login_for(url)  # usuario y contraseña guardados para ese sitio
     if cookies:
         session.cookies.update(cookies)
     try:
@@ -188,6 +190,8 @@ class EnhancedDownloadTask:
         self.custom_headers = headers or {}
         self.cookies = cookies  # CookieJar con las cookies del navegador
         self.session = requests.Session()
+        # Usuario y contraseña guardados para ese sitio (requests no los manda si redirige a otro servidor)
+        self.session.auth = network.login_for(url)
         self.retry_count = 0
         self.max_retries = max_retries
         self.resumable = False  # el servidor acepta rangos (descarga por partes / reanudable)
