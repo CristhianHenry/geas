@@ -17,6 +17,10 @@ from media_handler import MediaHandler
 
 logger = logging.getLogger(__name__)
 
+QUEUED = "en cola"
+# Estados en los que una descarga no ocupa lugar: la conversión a H.264 ya no usa la conexión
+_NOT_RUNNING = ("completado", "error", "cancelado", "pausado", "convirtiendo", "en espera", QUEUED)
+
 
 def _file_size(path):
     try:
@@ -103,6 +107,7 @@ class DownloadTask:
         if self.status == "completado":
             fields.update(resume=None, secrets=None)  # ya no hacen falta (ni las cookies guardadas)
         self.manager.history.update_entry(self.id, **fields)
+        self.manager.fill_slots()  # su lugar queda libre para la siguiente de la cola
 
     def start(self):
         if not self.started:
@@ -244,6 +249,7 @@ class YtDownloadTask:
             # yt-dlp no cierra su .part al interrumpirlo (queda en el rastro del error) y Windows
             # no dejaría renombrarlo al reanudar en esta misma sesión: se libera ya
             gc.collect()
+        self.manager.fill_slots()  # terminó, falló o se pausó: su lugar queda libre
 
     def pause(self):
         self._paused = True
@@ -273,9 +279,66 @@ class YtDownloadTask:
 
 
 class DownloadManager:
-    def __init__(self):
+    def __init__(self, max_active=3):
         self.tasks = {}
         self.history = DownloadHistory()
+        self.max_active = max_active  # descargas a la vez; las demás esperan su turno en la cola
+        self._queue = []              # ids en espera de turno: sale primero la del principio
+        self._lock = threading.RLock()
+        self._closing = False         # al salir no se inicia nada más
+
+    # ------------------------------------------------------------------
+    # Cola: como mucho max_active descargas a la vez
+    # ------------------------------------------------------------------
+
+    def set_max_active(self, value):
+        self.max_active = max(1, int(value))
+        self.fill_slots()
+
+    def _enqueue(self, task_id, front=False):
+        with self._lock:
+            if task_id in self._queue:
+                self._queue.remove(task_id)
+            self._queue.insert(0 if front else len(self._queue), task_id)
+            self.history.update_entry(task_id, touch=False, status=QUEUED)
+        self.fill_slots()
+
+    def _dequeue(self, task_id):
+        """Saca la descarga de la cola. Devuelve True si estaba en ella."""
+        with self._lock:
+            if task_id in self._queue:
+                self._queue.remove(task_id)
+                return True
+            return False
+
+    def running_count(self):
+        """Descargas que están usando la conexión (ni en pausa, ni en cola, ni terminadas)."""
+        return sum(1 for task_id in list(self.tasks)
+                   if not (self.get_status(task_id) or {}).get("status", "").startswith(_NOT_RUNNING))
+
+    def queued_count(self):
+        return len(self._queue)
+
+    def fill_slots(self):
+        """Inicia las descargas de la cola mientras haya lugar (lo llaman también los hilos al terminar)."""
+        with self._lock:
+            if self._closing:
+                return
+            free = self.max_active - self.running_count()
+            while free > 0 and self._queue:
+                task = self.tasks.get(self._queue.pop(0))
+                if task is None:
+                    continue
+                if task.started:
+                    task.resume()  # estaba en pausa
+                else:
+                    task.start()
+                self.history.update_entry(task.id, status="descargando")
+                free -= 1
+
+    # ------------------------------------------------------------------
+    # Descargas
+    # ------------------------------------------------------------------
 
     def add_download(self, url, output_file, threads=4, speed_limit_kbps=0, headers=None, cookies=None,
                      start=True, max_retries=3):
@@ -284,10 +347,10 @@ class DownloadManager:
         self.tasks[task.id] = task
         # Cabeceras y cookies del navegador, cifradas: para reanudar después de cerrar Geas
         secrets = {k: v for k, v in (("headers", headers), ("cookies", _cookies_to_list(cookies))) if v}
-        self.history.add_entry(url, output_file, "descargando" if start else "en espera",
+        self.history.add_entry(url, output_file, QUEUED if start else "en espera",
                                entry_id=task.id, kind=task.kind, secrets=secure_store.protect(secrets))
         if start:
-            task.start()
+            self._enqueue(task.id)
         return task.id
 
     def add_yt_download(self, url, output_file, format_id, context=None, source=None, convert_h264=False,
@@ -297,24 +360,35 @@ class DownloadManager:
         self.tasks[task.id] = task
         secrets = {k: v for k, v in (("context", dataclasses.asdict(context) if context else None),
                                      ("source", source)) if v}
-        self.history.add_entry(url, output_file, "descargando" if start else "en espera",
+        self.history.add_entry(url, output_file, QUEUED if start else "en espera",
                                entry_id=task.id, kind=task.kind, secrets=secure_store.protect(secrets),
                                video={"format_id": format_id, "convert_h264": bool(convert_h264)})
         if start:
-            task.start()
+            self._enqueue(task.id)
         return task.id
 
     def pause_download(self, task_id):
-        if task_id in self.tasks:
-            self.tasks[task_id].pause()
+        """Detiene la descarga; si estaba esperando en la cola, solo sale de ella."""
+        task = self.tasks.get(task_id)
+        if task is None:
+            return
+        if self._dequeue(task_id):
+            if not task.started:
+                self.history.update_entry(task_id, touch=False, status="en espera")
+            return
+        task.pause()
+        self.fill_slots()
 
-    def resume_download(self, task_id):
-        if task_id in self.tasks:
-            self.tasks[task_id].resume()
+    def resume_download(self, task_id, front=True):
+        """Vuelve a la cola (al principio, salvo front=False); empieza ya si hay lugar."""
+        if task_id in self.tasks and (self.get_status(task_id) or {}).get("status") in ("pausado", "en espera"):
+            self._enqueue(task_id, front=front)
 
     def cancel_download(self, task_id):
         if task_id in self.tasks:
+            self._dequeue(task_id)
             self.tasks[task_id].cancel()
+            self.fill_slots()
 
     def is_active(self, task_id):
         """True si la descarga está en curso (ni terminada, ni con error, ni cancelada)."""
@@ -324,9 +398,11 @@ class DownloadManager:
     def remove_task(self, task_id):
         """Quita la tarea de la sesión (cancelándola si sigue en curso)."""
         if task_id in self.tasks:
+            self._dequeue(task_id)
             if self.is_active(task_id):
                 self.tasks[task_id].cancel()
             del self.tasks[task_id]
+            self.fill_slots()
 
     def entry_credentials(self, entry_id):
         """(cabeceras, cookies) guardadas con la descarga, o (None, None)."""
@@ -342,11 +418,12 @@ class DownloadManager:
             return False
         return entry.get("kind") == "file" or (entry.get("kind") == "video" and bool(entry.get("video")))
 
-    def resume_entry(self, entry_id, threads=4, speed_limit_kbps=0, max_retries=3):
+    def resume_entry(self, entry_id, threads=4, speed_limit_kbps=0, max_retries=3, front=True):
         """
         Continúa una descarga que quedó a medias (al cerrar Geas, por un error o
         cancelada) desde lo ya descargado, con las cookies y cabeceras con que
         empezó. Si el archivo cambió en el servidor, empieza de nuevo.
+        Pasa por la cola (al principio, salvo front=False).
         Devuelve False si no hay datos para hacerlo o si ya está en curso.
         """
         if not self.can_resume(entry_id):
@@ -370,8 +447,8 @@ class DownloadManager:
                                   context=_context_from_dict(secrets.get("context")), source=secrets.get("source"),
                                   convert_h264=bool(video.get("convert_h264")), task_id=entry_id)
         self.tasks[entry_id] = task
-        self.history.update_entry(entry_id, status="descargando", auto_resume=None)
-        task.start()
+        self.history.update_entry(entry_id, touch=False, auto_resume=None)
+        self._enqueue(entry_id, front=front)
         return True
 
     def pending_auto_resume(self):
@@ -383,10 +460,15 @@ class DownloadManager:
         Al salir de Geas: detiene las descargas en curso guardando su avance para
         reanudarlas al volver (con resume_on_start, automáticamente al abrir).
         """
+        with self._lock:
+            self._closing = True  # que las que se detienen no den paso a las de la cola
         stopping = []
         for task_id, task in list(self.tasks.items()):
             status = (self.get_status(task_id) or {}).get("status", "")
-            if status in ("descargando", "obteniendo información", "esperando") or status.startswith("convirtiendo"):
+            if status == QUEUED:
+                if resume_on_start:  # sigue en la cola al volver a abrir Geas
+                    self.history.update_entry(task_id, touch=False, auto_resume=True)
+            elif status in ("descargando", "obteniendo información", "esperando") or status.startswith("convirtiendo"):
                 task.suspend()
                 stopping.append(task)
                 if resume_on_start:
@@ -401,12 +483,15 @@ class DownloadManager:
         task = self.tasks.get(task_id)
         if not task:
             return None
+        queued = task_id in self._queue
 
         # Handle YtDownloadTask
         if isinstance(task, YtDownloadTask):
             # Con el motivo, igual que las descargas directas ("error: ...")
             status = f"error: {task.error}" if task.status == "error" and task.error else task.status
-            if not task.started and status == "esperando":
+            if queued:
+                status = QUEUED
+            elif not task.started and status == "esperando":
                 status = "en espera"
             total = task.total_bytes
             if status.startswith("completado"):
@@ -432,8 +517,8 @@ class DownloadManager:
         progress = 0
         if worker.total_size > 0:
             progress = int((worker.progress / worker.total_size) * 100)
-        status = worker.status if task.started else "en espera"
-        active = status not in ("completado", "cancelado", "pausado") and not status.startswith("error")
+        status = QUEUED if queued else (worker.status if task.started else "en espera")
+        active = not status.startswith(_NOT_RUNNING)
         segments, connections = worker.get_segments()
 
         return {

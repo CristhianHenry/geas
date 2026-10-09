@@ -5,6 +5,7 @@ import os
 DEFAULT_CONFIG = {
     "default_download_folder": os.path.expanduser("~/Downloads"),
     "default_threads": 4,
+    "max_simultaneous_downloads": 3,  # las demás esperan en la cola
     "download_speed_limit_kbps": 0,  # 0 = sin límite
     "auto_retry_count": 3,
     "auto_start_downloads": True,
@@ -130,6 +131,12 @@ class AppSettings:
             if threads < 1 or threads > 16:
                 raise ValueError("Los hilos deben estar entre 1 y 16")
             return threads
+
+        elif key == "max_simultaneous_downloads":
+            count = int(value)
+            if count < 1 or count > 10:
+                raise ValueError("Las descargas a la vez deben estar entre 1 y 10")
+            return count
 
         elif key == "download_speed_limit_kbps":
             speed = int(value)

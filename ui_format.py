@@ -55,6 +55,7 @@ _STATUS_TEXT = {
     "esperando": "Conectando…",
     "pausado": "En pausa",
     "en espera": "En espera",
+    "en cola": "En cola",
     "cancelado": "Cancelado",
     "interrumpida": "Interrumpida",
     "Procesando/Convirtiendo...": "Procesando…",

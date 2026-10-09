@@ -73,6 +73,11 @@ class OptionsDialog(QDialog):
         self.retries = QSpinBox()
         self.retries.setRange(0, 10)
         self.retries.setValue(self.settings.get("auto_retry_count"))
+        self.max_downloads = QSpinBox()
+        self.max_downloads.setRange(1, 10)
+        self.max_downloads.setValue(self.settings.get("max_simultaneous_downloads"))
+        self.max_downloads.setToolTip("Las demás esperan en la cola y empiezan solas cuando termina una")
+        form.addRow("Descargas a la vez:", self.max_downloads)
         form.addRow("Conexiones por descarga:", self.threads)
         form.addRow("Límite de velocidad:", self.speed_limit)
         form.addRow("Reintentos si falla la conexión:", self.retries)
@@ -150,6 +155,7 @@ class OptionsDialog(QDialog):
         values = {
             "default_download_folder": self.folder.text().strip(),
             "default_threads": self.threads.value(),
+            "max_simultaneous_downloads": self.max_downloads.value(),
             "download_speed_limit_kbps": self.speed_limit.value(),
             "auto_retry_count": self.retries.value(),
             "auto_start_downloads": self.auto_start.isChecked(),

@@ -53,8 +53,9 @@ PROGRESS_ROLE = Qt.UserRole + 3  # porcentaje para la barra (columna Estado)
 SORT_ROLE = Qt.UserRole + 4      # valor para ordenar cada columna
 
 # Estados que quedan a medias si Geas se cierra
-UNFINISHED_STATES = ("descargando", "en espera", "pausado", "esperando", "obteniendo información")
+UNFINISHED_STATES = ("descargando", "en espera", "en cola", "pausado", "esperando", "obteniendo información")
 ACTIVE_STATES = ("descargando", "obteniendo información", "esperando")
+STOPPABLE_STATES = ACTIVE_STATES + ("en cola",)
 
 
 class ServerBridge(QObject):
@@ -143,8 +144,8 @@ class DownloadApp(QMainWindow):
         self._ytdlp_check = None
 
         try:
-            self.manager = DownloadManager()
             self.app_settings = AppSettings()
+            self.manager = DownloadManager(max_active=self.app_settings.get("max_simultaneous_downloads"))
             self.scheduler = Scheduler(self.manager)
 
             self.apply_stylesheet()
@@ -175,7 +176,7 @@ class DownloadApp(QMainWindow):
             # Descargas detenidas al reiniciar Geas (p. ej. tras actualizar yt-dlp): siguen solas
             for entry_id in self.manager.pending_auto_resume():
                 if self.manager.can_resume(entry_id):
-                    self.resume_entry(entry_id, show_dialog=False)
+                    self.resume_entry(entry_id, show_dialog=False, front=False)  # en su orden
                 else:
                     self.manager.history.update_entry(entry_id, touch=False, auto_resume=None)
             self._check_ytdlp_updates()
@@ -504,11 +505,14 @@ class DownloadApp(QMainWindow):
 
         active = [s for s in live.values() if s and (s["status"] in ACTIVE_STATES or s["status"].startswith("convirtiendo"))]
         waiting = sum(1 for s in live.values() if s and s["status"] in ("en espera", "pausado"))
+        queued = self.manager.queued_count()
         if active:
             speed = sum(s["speed_bps"] or 0 for s in active)
             text = f"{len(active)} descargando · {format_speed(speed) or '0 B/s'}"
         else:
             text = "Listo"
+        if queued:
+            text += f" · {queued} en cola (máximo {self.manager.max_active} a la vez)"
         if waiting:
             text += f" · {waiting} en pausa o en espera"
         self.status_label.setText(text)
@@ -535,7 +539,7 @@ class DownloadApp(QMainWindow):
         for action in (self.act_open_folder, self.act_copy_url, self.act_delete, self.act_redownload):
             action.setEnabled(bool(ids))
         self.act_resume.setEnabled(any(s in resumable or s.startswith(("error", "cancelado")) for s in statuses))
-        self.act_stop.setEnabled(any(s in ACTIVE_STATES or s.startswith("convirtiendo") for s in statuses))
+        self.act_stop.setEnabled(any(s in STOPPABLE_STATES or s.startswith("convirtiendo") for s in statuses))
         self.act_progress.setEnabled(any(i in self.manager.tasks for i in ids))
 
     def show_list_menu(self, position):
@@ -603,7 +607,7 @@ class DownloadApp(QMainWindow):
                 self.resume_entry(entry_id)
         self.refresh_list()
 
-    def resume_entry(self, entry_id, show_dialog=True):
+    def resume_entry(self, entry_id, show_dialog=True, front=True):
         """Continúa una descarga a medias desde donde quedó; sin datos para hacerlo, la descarga de nuevo."""
         if not self.manager.can_resume(entry_id):
             self.redownload(entry_id)
@@ -612,7 +616,8 @@ class DownloadApp(QMainWindow):
             entry_id,
             threads=self.app_settings.get("default_threads"),
             speed_limit_kbps=max(0, self.app_settings.get("download_speed_limit_kbps")),
-            max_retries=self.app_settings.get("auto_retry_count"))
+            max_retries=self.app_settings.get("auto_retry_count"),
+            front=front)
         if resumed:
             self.log_message(f"Reanudando: {os.path.basename(self._path_of(entry_id) or '')}")
             if show_dialog and self.app_settings.get("show_progress_dialog"):
@@ -621,14 +626,17 @@ class DownloadApp(QMainWindow):
     def stop_selected(self):
         for entry_id in self.selected_ids():
             status = self._status_of(entry_id)
-            if entry_id in self.manager.tasks and (status in ACTIVE_STATES or status.startswith("convirtiendo")):
+            if entry_id in self.manager.tasks and (status in STOPPABLE_STATES or status.startswith("convirtiendo")):
                 self.manager.pause_download(entry_id)
         self.refresh_list()
 
     def stop_all(self):
-        for task_id in list(self.manager.tasks):
-            status = (self.manager.get_status(task_id) or {}).get("status", "")
-            if status in ACTIVE_STATES or status.startswith("convirtiendo"):
+        # Primero las de la cola: si no, ocuparían el lugar de las que se van deteniendo
+        statuses = {task_id: (self.manager.get_status(task_id) or {}).get("status", "")
+                    for task_id in list(self.manager.tasks)}
+        for task_id in sorted(statuses, key=lambda t: statuses[t] != "en cola"):
+            status = statuses[task_id]
+            if status in STOPPABLE_STATES or status.startswith("convirtiendo"):
                 self.manager.pause_download(task_id)
         self.log_message("Todas las descargas detenidas")
         self.refresh_list()
@@ -636,7 +644,7 @@ class DownloadApp(QMainWindow):
     def resume_all(self):
         for task_id in list(self.manager.tasks):
             if (self.manager.get_status(task_id) or {}).get("status") in ("pausado", "en espera"):
-                self.manager.resume_download(task_id)
+                self.manager.resume_download(task_id, front=False)  # en su orden, al final de la cola
         self.log_message("Todas las descargas reanudadas")
         self.refresh_list()
 
@@ -753,6 +761,7 @@ class DownloadApp(QMainWindow):
     def show_options(self):
         dialog = OptionsDialog(self.app_settings, self, update_ytdlp=self.show_ytdlp_updater)
         if dialog.exec() == QDialog.Accepted:
+            self.manager.set_max_active(self.app_settings.get("max_simultaneous_downloads"))
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
             self._update_ffmpeg_label()
             self.log_message("Opciones actualizadas")
