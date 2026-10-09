@@ -129,6 +129,22 @@ def find_ffmpeg() -> Optional[str]:
     return None
 
 
+_LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés", "it": "Italiano",
+              "de": "Alemán", "ja": "Japonés", "ko": "Coreano", "zh": "Chino", "ru": "Ruso", "ar": "Árabe",
+              "hi": "Hindi", "ca": "Catalán", "gl": "Gallego", "eu": "Euskera", "nl": "Neerlandés",
+              "pl": "Polaco", "tr": "Turco", "id": "Indonesio", "vi": "Vietnamita", "th": "Tailandés"}
+_REGIONS = {"419": "Latinoamérica", "es": "España", "mx": "México", "us": "EE. UU.", "gb": "Reino Unido",
+            "br": "Brasil", "pt": "Portugal", "hans": "simplificado", "hant": "tradicional"}
+
+
+def _language_name(code: str) -> str:
+    """'es-419' -> 'Español (Latinoamérica)'; un código desconocido queda tal cual."""
+    base, _, region = code.lower().partition("-")
+    name = _LANGUAGES.get(base, code)
+    region = region.replace("orig", "").strip("-")
+    return f"{name} ({_REGIONS[region]})" if region in _REGIONS else name
+
+
 def _apply_proxy(ydl_opts):
     """El proxy elegido en Opciones (sin él, yt-dlp usa el del sistema)."""
     proxy = network.ytdlp_proxy()
@@ -552,6 +568,74 @@ class MediaHandler:
         return formats
 
     # ------------------------------------------------------------------ descarga
+
+    @staticmethod
+    def subtitle_options(info: Dict) -> List[Dict]:
+        """
+        Subtítulos que ofrece el video: [{'lang', 'label', 'auto'}]. Primero los
+        que subió el autor; de los automáticos, solo el del idioma original y las
+        traducciones al español y al inglés (YouTube ofrece más de cien).
+        """
+        options = []
+        for lang in sorted(info.get('subtitles') or {}):
+            if lang != 'live_chat':
+                options.append({'lang': lang, 'label': _language_name(lang), 'auto': False})
+        original = (info.get('language') or '').split('-')[0].lower()
+        manual = {o['lang'].split('-')[0].lower() for o in options}
+        for lang in sorted(info.get('automatic_captions') or {}):
+            base = lang.split('-')[0].lower()
+            is_original = lang.endswith('-orig') or (original and base == original)
+            if base in manual or not (is_original or base in ('es', 'en')) or (lang.count('-') and not lang.endswith('-orig')):
+                continue
+            kind = "automáticos" if is_original else "traducción automática"
+            options.append({'lang': lang, 'label': f"{_language_name(base)} ({kind})", 'auto': True})
+        return options
+
+    def download_subtitles(self, url: str, output_path: str, subtitles: Dict,
+                           context: Optional[BrowserContext] = None, source: Optional[Dict] = None) -> str:
+        """
+        Baja los subtítulos elegidos junto al video ("nombre.es.srt"), en un paso
+        aparte de la descarga: si el sitio los niega, el video ya está a salvo.
+        Con ffmpeg se convierten a SRT (lo abren todos los reproductores).
+        Devuelve la ruta del archivo o lanza una excepción.
+        """
+        source = source or {}
+        url = source.get('url') or url
+        headers = source.get('headers') or (context.http_headers() if context else None)
+        cookie_context = context if context and source.get('use_cookies', True) else None
+        base = os.path.splitext(output_path)[0]
+        lang = subtitles['lang']
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'skip_download': True,
+            'writesubtitles': not subtitles.get('auto'),
+            'writeautomaticsub': bool(subtitles.get('auto')),
+            'subtitleslangs': [lang],
+            'subtitlesformat': 'srt/vtt/best',
+            'outtmpl': base + '.%(ext)s',
+            'http_headers': headers,
+            'socket_timeout': 20,
+            'logger': _YdlLogger(),
+        }
+        _apply_proxy(ydl_opts)
+        ffmpeg_dir = find_ffmpeg()
+        if ffmpeg_dir:
+            ydl_opts['ffmpeg_location'] = ffmpeg_dir
+            ydl_opts['postprocessors'] = [{'key': 'FFmpegSubtitlesConvertor', 'format': 'srt', 'when': 'before_dl'}]
+        if source.get('impersonate'):
+            ydl_opts['impersonate'] = ImpersonateTarget('chrome')
+        with (cookie_context.cookie_file() if cookie_context else nullcontext()) as cookiefile:
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+        found = sorted(glob.glob(glob.escape(base) + f".{lang}.*"),
+                       key=lambda p: (not p.endswith('.srt'), not p.endswith('.vtt')))
+        if not found:
+            raise RuntimeError(f"el sitio no entregó subtítulos en {_language_name(lang)}")
+        return found[0]
 
     def download_stream(self, url: str, format_id: str, output_path: str,
                        progress_callback: Callable = None,

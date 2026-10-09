@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QLineEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QProgressBar,
-    QGroupBox, QCheckBox, QFileDialog, QAbstractItemView
+    QGroupBox, QCheckBox, QFileDialog, QAbstractItemView, QComboBox, QWidget
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QPixmap
@@ -57,7 +57,7 @@ class MediaInfoThread(QThread):
 
 class VideoQualityDialog(QDialog):
     def __init__(self, url, manager, parent=None, context=None, prefer_stream=False, folder=None,
-                 convert_note=False, audio_folder=None):
+                 convert_note=False, audio_folder=None, subtitle_lang="", ffmpeg=False):
         super().__init__(parent)
         self.url = url
         self.manager = manager
@@ -66,6 +66,8 @@ class VideoQualityDialog(QDialog):
         self.folder = folder or os.path.expanduser("~/Downloads")
         self.audio_folder = audio_folder or self.folder  # "solo audio" (con carpetas por tipo: Música)
         self.convert_note = convert_note  # avisar que se convertirá a H.264 si hace falta
+        self.subtitle_lang = subtitle_lang  # idioma de subtítulos elegido la última vez
+        self.ffmpeg = ffmpeg                # con ffmpeg los subtítulos se pueden incrustar
         self.media_handler = MediaHandler()
         self.selected_format = None
         self.selected_type = 'video'
@@ -132,6 +134,23 @@ class VideoQualityDialog(QDialog):
         format_layout.addWidget(self.format_table)
         format_layout.addWidget(self.advanced_view_cb)
         layout.addWidget(self.format_group, 1)
+
+        # === Subtítulos (solo si el video los ofrece) ===
+        self.subs_widget = QWidget()
+        subs_layout = QHBoxLayout(self.subs_widget)
+        subs_layout.setContentsMargins(0, 0, 0, 0)
+        self.subs_combo = QComboBox()
+        self.subs_combo.addItem("Sin subtítulos", None)
+        self.embed_check = QCheckBox("Incrustar en el video")
+        self.embed_check.setChecked(self.ffmpeg)
+        self.embed_check.setEnabled(self.ffmpeg)
+        self.embed_check.setToolTip("Como una pista que el reproductor muestra o esconde" if self.ffmpeg else
+                                    "Requiere ffmpeg: sin él quedan como archivo aparte junto al video")
+        subs_layout.addWidget(QLabel("Subtítulos:"))
+        subs_layout.addWidget(self.subs_combo, 1)
+        subs_layout.addWidget(self.embed_check)
+        self.subs_widget.hide()
+        layout.addWidget(self.subs_widget)
 
         # === Destino ===
         path_layout = QGridLayout()
@@ -210,6 +229,13 @@ class VideoQualityDialog(QDialog):
         else:
             self.thumb_label.setText("Sin vista previa")
 
+        # Subtítulos: se preselecciona el idioma elegido la última vez, si está
+        for option in self.media_handler.subtitle_options(info):
+            self.subs_combo.addItem(option['label'], option)
+            if self.subtitle_lang and option['lang'] == self.subtitle_lang and self.subs_combo.currentIndex() == 0:
+                self.subs_combo.setCurrentIndex(self.subs_combo.count() - 1)
+        self.subs_widget.setVisible(self.subs_combo.count() > 1)
+
         # Obtener ambas listas de formatos
         self.smart_formats = self.media_handler.get_formats(info)
         self.raw_formats = self.media_handler.get_raw_formats(info)
@@ -226,8 +252,8 @@ class VideoQualityDialog(QDialog):
             if advanced and f['type'] == 'video' and f['resolution'] == 'N/A':
                 continue
             size = f.get('filesize') or f.get('filesize_approx')
-            self.add_row(f['resolution'], f['ext'], format_size(size) or "Desconocido",
-                         f['vcodec'] or 'audio', f['format_id'], f['type'])
+            codec = 'audio' if f['vcodec'] in (None, 'none') else f['vcodec']
+            self.add_row(f['resolution'], f['ext'], format_size(size) or "Desconocido", codec, f['format_id'], f['type'])
         if self.format_table.rowCount():
             self.format_table.selectRow(0)  # la mejor calidad, preseleccionada
 
@@ -253,6 +279,7 @@ class VideoQualityDialog(QDialog):
             self.selected_type = self.format_table.item(row, 0).data(Qt.UserRole) or 'video'
             self.download_btn.setEnabled(True)
             self.later_btn.setEnabled(True)
+            self.subs_widget.setEnabled(self.selected_type != 'audio')  # un MP3 no lleva subtítulos
             self._update_path()
 
     def _update_path(self):
@@ -308,4 +335,13 @@ class VideoQualityDialog(QDialog):
             'source': source,
             'save_path': unique_path(path),
             'start_now': self.start_now,
+            'subtitles': self.selected_subtitles(),
         }
+
+    def selected_subtitles(self):
+        """{'lang', 'auto', 'embed'} o None (sin subtítulos, o si se eligió solo audio)."""
+        option = self.subs_combo.currentData()
+        if not option or self.selected_type == 'audio':
+            return None
+        return {'lang': option['lang'], 'auto': option['auto'],
+                'embed': self.embed_check.isEnabled() and self.embed_check.isChecked()}

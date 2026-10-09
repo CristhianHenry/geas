@@ -1101,7 +1101,9 @@ class DownloadApp(QMainWindow):
             dialog = VideoQualityDialog(url, self.manager, self, context=context, prefer_stream=prefer_stream,
                                         folder=self.folder_for("video.mp4"),
                                         audio_folder=self.folder_for("audio.mp3"),
-                                        convert_note=bool(convert and find_ffmpeg()))
+                                        convert_note=bool(convert and find_ffmpeg()),
+                                        subtitle_lang=self.app_settings.get("subtitle_language"),
+                                        ffmpeg=bool(find_ffmpeg()))
             if from_browser:
                 self.bring_to_front(dialog)
             if dialog.exec() == QDialog.Accepted:
@@ -1109,7 +1111,10 @@ class DownloadApp(QMainWindow):
                 # Descargar con las cookies/cabeceras con las que se analizó
                 task_id = self.manager.add_yt_download(info['url'], info['save_path'], info['format_id'],
                                                        context=context, source=info.get('source'),
-                                                       convert_h264=convert, start=info['start_now'])
+                                                       convert_h264=convert, start=info['start_now'],
+                                                       subtitles=info.get('subtitles'))
+                if info.get('subtitles'):
+                    self.app_settings.set("subtitle_language", info['subtitles']['lang'])  # para la próxima
                 if replace_entry:
                     self.manager.remove_task(replace_entry)
                     self.manager.history.remove_entries([replace_entry])

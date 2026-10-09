@@ -141,7 +141,7 @@ class YtDownloadTask:
     kind = "video"
 
     def __init__(self, url, output_path, format_id, manager, context=None, source=None, convert_h264=False,
-                 task_id=None):
+                 task_id=None, subtitles=None):
         self.id = task_id or str(uuid.uuid4())
         self.url = url
         self.output_path = output_path
@@ -150,6 +150,7 @@ class YtDownloadTask:
         self.context = context  # BrowserContext (cookies del navegador)
         self.source = source    # URL y cabeceras con las que se analizó el video
         self.convert_h264 = convert_h264  # convertir AV1/VP9/HEVC a H.264 al terminar
+        self.subtitles = subtitles        # {'lang', 'auto', 'embed'} o None
         self.handler = MediaHandler()
         self._cancelled = False
         self._paused = False
@@ -201,6 +202,23 @@ class YtDownloadTask:
             logger.error(f"No se pudo convertir {self.output_path} a H.264: {e}")
             return "sin convertir a H.264"
 
+    def _add_subtitles(self):
+        """Subtítulos elegidos, aparte o incrustados. Si fallan, el video ya quedó: solo se avisa."""
+        if not self.subtitles or self.output_path.lower().endswith(".mp3"):
+            return None
+        self.speed_bps, self.eta_seconds = 0, None
+        self.status = "descargando subtítulos"
+        try:
+            path = self.handler.download_subtitles(self.url, self.output_path, self.subtitles,
+                                                   context=self.context, source=self.source)
+            if self.subtitles.get("embed") and video_converter.can_embed():
+                video_converter.embed_subtitles(self.output_path, path, self.subtitles["lang"])
+                os.remove(path)
+            return None
+        except Exception as e:
+            logger.error(f"No se pudieron agregar los subtítulos a {self.output_path}: {e}")
+            return "sin subtítulos"
+
     def _run(self):
         self.error = None
         interrupted = False
@@ -225,9 +243,9 @@ class YtDownloadTask:
                 progress_info_callback=self._on_progress_info
             )
 
-            notice = self._convert_if_needed()
-            # Con aviso si el video quedó sin reempaquetar (falta ffmpeg) o sin convertir
-            self.status = f"completado ({notice})" if notice else "completado"
+            notices = [n for n in (self._convert_if_needed(), self._add_subtitles()) if n]
+            # Con aviso si el video quedó sin reempaquetar (falta ffmpeg), sin convertir o sin subtítulos
+            self.status = f"completado ({', '.join(notices)})" if notices else "completado"
             self.progress = 100
             self.speed_bps, self.eta_seconds = 0, None
             self.manager.history.update_entry(self.id, status="completado", size=_file_size(self.output_path),
@@ -354,15 +372,16 @@ class DownloadManager:
         return task.id
 
     def add_yt_download(self, url, output_file, format_id, context=None, source=None, convert_h264=False,
-                        start=True):
+                        start=True, subtitles=None):
         task = YtDownloadTask(url, output_file, format_id, self, context=context, source=source,
-                              convert_h264=convert_h264)
+                              convert_h264=convert_h264, subtitles=subtitles)
         self.tasks[task.id] = task
         secrets = {k: v for k, v in (("context", dataclasses.asdict(context) if context else None),
                                      ("source", source)) if v}
         self.history.add_entry(url, output_file, QUEUED if start else "en espera",
                                entry_id=task.id, kind=task.kind, secrets=secure_store.protect(secrets),
-                               video={"format_id": format_id, "convert_h264": bool(convert_h264)})
+                               video={"format_id": format_id, "convert_h264": bool(convert_h264),
+                                      "subtitles": subtitles})
         if start:
             self._enqueue(task.id)
         return task.id
@@ -472,7 +491,8 @@ class DownloadManager:
             video = entry["video"]
             task = YtDownloadTask(entry["url"], entry["output_path"], video.get("format_id"), self,
                                   context=_context_from_dict(secrets.get("context")), source=secrets.get("source"),
-                                  convert_h264=bool(video.get("convert_h264")), task_id=entry_id)
+                                  convert_h264=bool(video.get("convert_h264")), task_id=entry_id,
+                                  subtitles=video.get("subtitles"))
         self.tasks[entry_id] = task
         self.history.update_entry(entry_id, touch=False, auto_resume=None)
         self._enqueue(entry_id, front=front)

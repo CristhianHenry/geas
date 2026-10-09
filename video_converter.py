@@ -74,10 +74,10 @@ def convert_to_h264(path: str, progress_callback: Callable[[float], None] = None
 
     command = [
         ffmpeg, "-y", "-hide_banner", "-v", "error", "-nostats", "-progress", "pipe:1",
-        "-i", path, "-map", "0:v:0", "-map", "0:a?",
+        "-i", path, "-map", "0:v:0", "-map", "0:a?", "-map", "0:s?",
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1",
-        "-c:a", "copy", "-movflags", "+faststart", temp,
+        "-c:a", "copy", "-c:s", "mov_text", "-movflags", "+faststart", temp,
     ]
     logger.info(f"Convirtiendo a H.264: {os.path.basename(path)}")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -100,6 +100,43 @@ def convert_to_h264(path: str, progress_callback: Callable[[float], None] = None
     finally:
         if process.poll() is None:
             process.kill()
+        if os.path.exists(temp):
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+
+
+# Códigos de idioma de los subtítulos (ISO 639-1) en los que MP4 espera (ISO 639-2)
+_LANGUAGE_CODES = {"es": "spa", "en": "eng", "pt": "por", "fr": "fra", "it": "ita", "de": "deu",
+                   "ja": "jpn", "ko": "kor", "zh": "zho", "ru": "rus", "ar": "ara", "hi": "hin"}
+
+
+def can_embed() -> bool:
+    """Incrustar subtítulos requiere ffmpeg; sin él quedan como archivo junto al video."""
+    return _tool("ffmpeg") is not None
+
+
+def embed_subtitles(path: str, subtitle_path: str, language: str = "") -> None:
+    """
+    Incrusta un archivo de subtítulos (.srt o .vtt) en el MP4, sin recodificar el
+    video ni el audio. Los reproductores los muestran como una pista que se activa.
+    """
+    ffmpeg = _tool("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg no está instalado")
+    temp = os.path.splitext(path)[0] + ".subtitulando.mp4"
+    code = _LANGUAGE_CODES.get(language.split("-")[0].lower(), "und")
+    command = [ffmpeg, "-y", "-hide_banner", "-v", "error", "-i", path, "-i", subtitle_path,
+               "-map", "0", "-map", "1:0", "-c", "copy", "-c:s", "mov_text",
+               "-metadata:s:s:0", f"language={code}", "-movflags", "+faststart", temp]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                creationflags=_CREATION_FLAGS)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip()[-300:] or f"ffmpeg terminó con código {result.returncode}")
+        os.replace(temp, path)
+    finally:
         if os.path.exists(temp):
             try:
                 os.remove(temp)

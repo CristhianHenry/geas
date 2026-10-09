@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
     "show_progress_dialog": True,   # ventana de progreso al iniciar una descarga (como IDM)
     "clipboard_monitor": False,     # detectar enlaces copiados
     "convert_to_h264": True,        # convertir AV1/VP9/HEVC a H.264 al terminar (requiere ffmpeg)
+    "subtitle_language": "",        # idioma de subtítulos elegido la última vez (se preselecciona)
     "check_ytdlp_updates": True,    # comprobar una vez al día si hay una versión nueva de yt-dlp
     "check_app_updates": True,      # Geas instalada: buscar una versión nueva una vez al día
     "app_last_check": "",           # fecha de la última búsqueda
