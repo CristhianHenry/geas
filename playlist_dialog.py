@@ -9,14 +9,15 @@ from PySide6.QtCore import Qt
 
 import icons
 from enhanced_downloader import sanitize_filename
+from media_handler import FORMAT_AUDIO, format_up_to
 
-# (texto, selector de formato de yt-dlp, es solo audio). Se prefiere H.264 (avc1) para no tener que convertir.
+# (texto, selector de formato de yt-dlp, es solo audio)
 QUALITIES = [
-    ("1080p", "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b", False),
-    ("720p", "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]/b", False),
-    ("480p", "bv*[height<=480][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=480]+ba/b[height<=480]/b", False),
+    ("1080p", format_up_to(1080), False),
+    ("720p", format_up_to(720), False),
+    ("480p", format_up_to(480), False),
     ("Máxima (puede necesitar conversión)", "bv*+ba/b", False),
-    ("Solo audio (MP3)", "bestaudio/best", True),
+    ("Solo audio (MP3)", FORMAT_AUDIO, True),
 ]
 SUBTITLES = [("Sin subtítulos", None), ("Español", "es"), ("Inglés", "en")]
 COL_CHECK, COL_NUMBER, COL_TITLE, COL_DURATION = range(4)

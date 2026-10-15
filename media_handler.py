@@ -129,6 +129,18 @@ def find_ffmpeg() -> Optional[str]:
     return None
 
 
+def format_up_to(height: int) -> str:
+    """
+    Selector de yt-dlp para cuando no se elige el formato video por video (listas,
+    celular): hasta esa altura, prefiriendo H.264 con audio AAC, que abre cualquier
+    reproductor sin convertir.
+    """
+    return f"bv*[height<={height}][vcodec^=avc1]+ba[ext=m4a]/bv*[height<={height}]+ba/b[height<={height}]/b"
+
+
+FORMAT_BEST = format_up_to(1080)
+FORMAT_AUDIO = "bestaudio/best"  # se convierte a MP3 al descargar
+
 _LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "fr": "Francés", "it": "Italiano",
               "de": "Alemán", "ja": "Japonés", "ko": "Coreano", "zh": "Chino", "ru": "Ruso", "ar": "Árabe",
               "hi": "Hindi", "ca": "Catalán", "gl": "Gallego", "eu": "Euskera", "nl": "Neerlandés",

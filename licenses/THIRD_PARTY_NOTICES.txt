@@ -24,3 +24,6 @@ PySocks
 
 Beautiful Soup 4, soupsieve, lxml
   Licencias: MIT (Beautiful Soup, soupsieve), BSD-3-Clause (lxml; incluye libxml2 y libxslt, licencia MIT).
+
+qrcode
+  Licencia: BSD-3-Clause. https://github.com/lincolnloop/python-qrcode

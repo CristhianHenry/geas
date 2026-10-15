@@ -6,6 +6,7 @@ PySide6>=6.12.0
 # Web Scraping y Requests
 requests>=2.25.0
 PySocks>=1.7.1      # proxies SOCKS (Opciones > Proxy y sitios)
+qrcode>=8.0         # código QR de "Control desde el celular"
 beautifulsoup4>=4.9.0
 lxml>=4.6.0
 

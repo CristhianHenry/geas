@@ -24,6 +24,9 @@ DEFAULT_CONFIG = {
     "subtitle_language": "",        # idioma de subtítulos elegido la última vez (se preselecciona)
     "check_ytdlp_updates": True,    # comprobar una vez al día si hay una versión nueva de yt-dlp
     "check_app_updates": True,      # Geas instalada: buscar una versión nueva una vez al día
+    "remote_enabled": False,        # control desde el celular (escucha en la red solo si está activo)
+    "remote_port": 8767,
+    "remote_token": "",             # código secreto del celular, cifrado
     "app_last_check": "",           # fecha de la última búsqueda
     "ytdlp_last_check": "",         # fecha de la última comprobación
     "ytdlp_latest_seen": ""         # última versión publicada que se vio
@@ -141,6 +144,12 @@ class AppSettings:
             if threads < 1 or threads > 16:
                 raise ValueError("Los hilos deben estar entre 1 y 16")
             return threads
+
+        elif key == "remote_port":
+            port = int(value)
+            if not 1024 <= port <= 65535:
+                raise ValueError("El puerto debe estar entre 1024 y 65535")
+            return port
 
         elif key == "theme":
             if value not in ("claro", "oscuro", "sistema"):

@@ -22,13 +22,23 @@
 - **Conversión a H.264**: Los videos en AV1, VP9 o HEVC se convierten al terminar para que los abra el Reproductor de Windows (se puede desactivar en Opciones)
 - **Navegador Integrado**: Navega la web directamente desde la aplicación
 - **Programador de Descargas**: Programa descargas para ejecutarse en un momento específico
+- **Cola de descargas**: Como mucho N descargas a la vez (Opciones → Conexión); las demás esperan "En cola" y empiezan solas
+- **Al terminar las descargas**: Cerrar Geas, suspender o apagar el equipo, con 30 segundos para cancelar (menú Descargas)
+- **Actualizar dirección de descarga**: Si el enlace venció, se pega uno nuevo (o se vuelve a hacer clic en el navegador) y la descarga sigue desde donde quedó
+- **Proxy y usuarios por sitio**: Proxy de Windows, sin proxy o uno propio (HTTP o SOCKS), y usuario y contraseña por servidor, guardados cifrados
+- **Carpeta por tipo**: Opcionalmente, cada tipo de archivo en su subcarpeta (Video, Música, Comprimidos, Documentos, Programas)
+- **Subtítulos**: Elige el idioma en la ventana de calidad; se guardan junto al video o, con ffmpeg, incrustados
+- **Listas de reproducción y canales**: Descarga una lista o un canal completo con una sola elección de calidad, numerados y en su carpeta
+- **Tema oscuro**: Claro, oscuro o igual que Windows (Opciones → General)
+- **Control desde el celular**: Tareas → Control desde el celular muestra un código QR; desde el navegador del celular se añaden enlaces y se ven, pausan o cancelan las descargas. Apagado por defecto y protegido con un código secreto
 
-### Extensión de Chrome / Edge
+### Extensión de Chrome / Edge / Firefox
 - **Captura de Descargas**: Las descargas del navegador (ZIP, EXE, PDF, MP4, ISO...) pasan a Geas, como en IDM. Si Geas no responde, la descarga vuelve al navegador
 - **Sesión del Navegador**: Cada descarga lleva las cookies, el Referer y el User-Agent del navegador, así funcionan los sitios con inicio de sesión o enlaces protegidos
 - **Detección Automática de Medios**: Detecta videos (MP4, WebM), listas HLS (M3U8) y DASH (MPD) en cualquier página; el icono muestra cuántos encontró
 - **Botón sobre los Videos**: "Descargar video" sobre cada reproductor, incluidos los que están dentro de iframes o shadow DOM
 - **Menú Contextual**: Descarga cualquier enlace, imagen, audio o video con clic derecho, o el video de la página completa
+- **Descargar todos los enlaces**: De la página o de lo seleccionado; Geas los lista con casillas y filtros, y los pone en la cola
 - **Filtrado Inteligente**: Ignora fragmentos (.ts, .m4s), peticiones parciales y archivos pequeños
 - **Popup**: Muestra si Geas está conectada, los medios detectados en la pestaña y permite activar/desactivar la captura
 

@@ -18,6 +18,7 @@ from PySide6.QtGui import QAction, QActionGroup, QLinearGradient, QKeySequence, 
 import icons
 import network
 import paths
+import secure_store
 import power_actions
 import theme
 import ytdlp_updater
@@ -45,6 +46,8 @@ from file_categories import CATEGORIES, category_of
 from media_handler import find_ffmpeg
 from ui_format import format_size, format_speed, format_eta, format_date, format_percent, describe_status
 from api_server import start_server
+from remote_server import RemoteServer, new_token
+from remote_dialog import RemoteDialog
 
 # Tipos que son listas de reproducción (se analizan con yt-dlp, no se descargan tal cual)
 STREAM_CONTENT_TYPES = {
@@ -66,6 +69,12 @@ SORT_ROLE = Qt.UserRole + 4      # valor para ordenar cada columna
 UNFINISHED_STATES = ("descargando", "en espera", "en cola", "pausado", "esperando", "obteniendo información")
 ACTIVE_STATES = ("descargando", "obteniendo información", "esperando")
 STOPPABLE_STATES = ACTIVE_STATES + ("en cola",)
+
+
+class RemoteBridge(QObject):
+    """Lo que llega del celular (en el hilo del servidor) pasa a la interfaz como señales."""
+    add_requested = Signal(object)          # resultado de remote_server.analyze()
+    action_requested = Signal(str, str)     # (id de la descarga, 'pausar' | 'reanudar' | 'cancelar')
 
 
 class ServerBridge(QObject):
@@ -188,6 +197,16 @@ class DownloadApp(QMainWindow):
             self.server.download_requested.connect(self.handle_browser_request)
             self.server.start()
 
+            # Control desde el celular (apagado salvo que se haya activado)
+            self.remote_bridge = RemoteBridge()
+            self.remote_bridge.add_requested.connect(self.on_remote_add)
+            self.remote_bridge.action_requested.connect(self.on_remote_action)
+            self.remote = RemoteServer(self.remote_snapshot, self.remote_bridge.add_requested.emit,
+                                       self.remote_bridge.action_requested.emit)
+            self.remote_error = ""
+            if self.app_settings.get("remote_enabled"):
+                self._start_remote()
+
             self.setup_tray_icon()
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
 
@@ -239,6 +258,8 @@ class DownloadApp(QMainWindow):
         self.act_scheduler = self._action("scheduler", "Programador", self.show_scheduler)
         self.act_browser = self._action("browser", "Navegador", self.show_browser, tip="Navegador integrado")
         self.act_smart = self._action("smart", "Detector", self.open_smart_detector, tip="Detector inteligente de enlaces")
+        self.act_remote = self._action(None, "Control desde el celular…", self.show_remote_dialog,
+                                       tip="Añadir y ver descargas desde el navegador del celular")
         self.act_log = self._action("log", "Registro", self.show_log, tip="Registro de actividad")
         self.act_open = self._action("open", "Abrir", self.open_selected)
         self.act_open_folder = self._action("folder", "Abrir carpeta", self.open_selected_folder)
@@ -268,6 +289,8 @@ class DownloadApp(QMainWindow):
         bar = self.menuBar()
         tasks = bar.addMenu("&Tareas")
         tasks.addActions([self.act_add, self.act_paste, self.act_smart])
+        tasks.addSeparator()
+        tasks.addAction(self.act_remote)
         tasks.addSeparator()
         tasks.addAction(self.act_quit)
 
@@ -1254,6 +1277,103 @@ class DownloadApp(QMainWindow):
             self.logger.error(f"Error al procesar video detectado: {e}")
 
     # ------------------------------------------------------------------
+    # Control desde el celular
+    # ------------------------------------------------------------------
+
+    def _remote_token(self):
+        """Código secreto del celular (guardado cifrado); se crea la primera vez."""
+        token = secure_store.unprotect(self.app_settings.get("remote_token"))
+        if not token:
+            token = new_token()
+            self.app_settings.set("remote_token", secure_store.protect(token) or "")
+        return token
+
+    def _start_remote(self):
+        port = self.app_settings.get("remote_port")
+        try:
+            self.remote.start(port, self._remote_token())
+            self.remote_error = ""
+            self.log_message(f"Control desde el celular activo (puerto {port})")
+        except OSError as e:
+            self.remote_error = f"el puerto {port} está ocupado o bloqueado ({e.strerror or e})"
+            self.log_message(f"No se pudo activar el control desde el celular: {self.remote_error}")
+
+    def show_remote_dialog(self):
+        dialog = RemoteDialog(self.remote.running, self.app_settings.get("remote_port"), self._remote_token(),
+                              self.remote_error, self)
+        dialog.enabled_changed.connect(lambda on: self._set_remote(on, dialog))
+        dialog.new_code_requested.connect(lambda: self._new_remote_code(dialog))
+        dialog.exec()
+
+    def _set_remote(self, enabled, dialog):
+        self.app_settings.set("remote_enabled", enabled)
+        if enabled:
+            self._start_remote()
+        else:
+            self.remote.stop()
+            self.remote_error = ""
+            self.log_message("Control desde el celular desactivado")
+        dialog.show_state(self.remote.running, self._remote_token(), self.remote_error)
+
+    def _new_remote_code(self, dialog):
+        """Código nuevo: los celulares que ya entraron quedan fuera hasta escanear el QR otra vez."""
+        token = new_token()
+        self.app_settings.set("remote_token", secure_store.protect(token) or "")
+        self.remote.token = token
+        self.log_message("Código del celular cambiado")
+        dialog.show_state(self.remote.running, token, self.remote_error)
+
+    def remote_snapshot(self):
+        """Descargas para la página del celular. Se llama desde el hilo del servidor: no toca la interfaz."""
+        entries = sorted(self.manager.history.get_history(), key=lambda e: e.get("timestamp") or "", reverse=True)
+        rows, active, speed = [], 0, 0
+        for entry in entries[:40]:
+            live = self.manager.get_status(entry["id"])
+            path, status, text, progress, total, row_speed, eta = self._row_values(entry, live)
+            running = status in ACTIVE_STATES or status.startswith("convirtiendo")
+            active += running
+            speed += row_speed or 0
+            rows.append({
+                "id": entry["id"],
+                "nombre": os.path.basename(path) or "descarga",
+                "estado": text,
+                "porcentaje": progress,
+                "velocidad": format_speed(row_speed) if running else "",
+                "restante": format_eta(eta) if running else "",
+                "error": status.startswith("error"),
+                "puede_pausar": status in STOPPABLE_STATES,
+                "puede_reanudar": status in ("pausado", "en espera", "interrumpida")
+                                  or status.startswith(("error", "cancelado")),
+            })
+        summary = f"{active} descargando · {format_speed(speed) or '0 B/s'}" if active else "Sin descargas activas"
+        return {"resumen": summary, "descargas": rows}
+
+    def on_remote_add(self, result):
+        """Enlace enviado desde el celular, ya analizado: va a la cola sin abrir ventanas en la PC."""
+        path = unique_path(os.path.join(self.folder_for(result["name"]), result["name"]))
+        if result["kind"] == "file":
+            self.start_file_download(result["url"], path, batch=True)
+        else:
+            self.manager.add_yt_download(result["url"], path, result["format"], source=result.get("source"),
+                                         convert_h264=self.app_settings.get("convert_to_h264"))
+        self.log_message(f"Descarga añadida desde el celular: {os.path.basename(path)}")
+        self.notify("Descarga añadida desde el celular", os.path.basename(path))
+        self.refresh_list()
+
+    def on_remote_action(self, entry_id, verb):
+        status = self._status_of(entry_id)
+        if verb == "pausar" and entry_id in self.manager.tasks:
+            self.manager.pause_download(entry_id)
+        elif verb == "cancelar" and entry_id in self.manager.tasks:
+            self.manager.cancel_download(entry_id)
+        elif verb == "reanudar":
+            if entry_id in self.manager.tasks and status in ("pausado", "en espera"):
+                self.manager.resume_download(entry_id)
+            elif status == "interrumpida" or status.startswith(("error", "cancelado")):
+                self.resume_entry(entry_id, show_dialog=False)
+        self.refresh_list()
+
+    # ------------------------------------------------------------------
     # Bandeja, portapapeles, registro y cierre
     # ------------------------------------------------------------------
 
@@ -1323,6 +1443,7 @@ class DownloadApp(QMainWindow):
 
         try:
             self.timer.stop()
+            self.remote.stop()
             self.toggle_clipboard_monitor(False)
             for window in [*self.dialogs.values(), self.browser_window, self.scheduler_dialog, self.ytdlp_dialog,
                            self.log_window]:
