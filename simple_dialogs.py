@@ -13,15 +13,16 @@ import icons
 class AddUrlDialog(QDialog):
     """'Introduce la dirección para descargar' (como IDM): toma la URL del portapapeles si hay una."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, title="Añadir enlace", label="Dirección del archivo, video o página:",
+                 hint="Si es una página con video, Geas busca el video; si es un archivo, lo descarga.", icon="add"):
         super().__init__(parent)
-        self.setWindowTitle("Añadir enlace")
-        self.setWindowIcon(icons.icon("add"))
+        self.setWindowTitle(title)
+        self.setWindowIcon(icons.icon(icon))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.setMinimumWidth(560)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Dirección del archivo, video o página:"))
+        layout.addWidget(QLabel(label))
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("https://")
         clipboard = QApplication.clipboard().text().strip()
@@ -29,8 +30,9 @@ class AddUrlDialog(QDialog):
             self.url_input.setText(clipboard)
             self.url_input.selectAll()
         layout.addWidget(self.url_input)
-        hint = QLabel("Si es una página con video, Geas busca el video; si es un archivo, lo descarga.")
+        hint = QLabel(hint)
         hint.setObjectName("Hint")
+        hint.setWordWrap(True)
         layout.addWidget(hint)
 
         buttons = QHBoxLayout()

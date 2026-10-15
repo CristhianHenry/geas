@@ -1,19 +1,62 @@
 # links_dialog.py - "Descargar todos los enlaces" (como en IDM): elegir qué enlaces de una página descargar
 import os
+from urllib.parse import urljoin, urldefrag
 
+import requests
+from bs4 import BeautifulSoup
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 
 import icons
+import network
+from browser_context import DEFAULT_USER_AGENT
 from enhanced_downloader import filename_from_url
 from file_categories import CATEGORIES, category_of
 
 ALL_TYPES = "Todos los tipos"
 OTHER = "Páginas y otros"
 COL_CHECK, COL_NAME, COL_TYPE, COL_URL = range(4)
+
+
+def page_links(url, timeout=20, limit=5000):
+    """
+    Enlaces de una página (para "Enlaces de página", cuando no viene de la extensión):
+    (título, [{'url', 'text'}]). Lanza una excepción si la página no se puede leer.
+    """
+    response = requests.get(url, headers={"User-Agent": DEFAULT_USER_AGENT}, auth=network.login_for(url),
+                            timeout=timeout)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    title = soup.title.get_text(strip=True) if soup.title else ""
+    seen, links = set(), []
+    for anchor in soup.find_all("a", href=True):
+        link = urldefrag(urljoin(response.url, anchor["href"].strip()))[0]
+        if not link.lower().startswith(("http://", "https://")) or link in seen:
+            continue
+        seen.add(link)
+        links.append({"url": link, "text": " ".join(anchor.get_text(" ", strip=True).split())[:200]})
+        if len(links) >= limit:
+            break
+    return title, links
+
+
+class PageLinksThread(QThread):
+    """Lee los enlaces de una página sin congelar la interfaz."""
+    done = Signal(str, object, str)  # (título, enlaces, error)
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        try:
+            title, links = page_links(self.url)
+            self.done.emit(title, links, "")
+        except Exception as e:
+            self.done.emit("", [], str(e))
 
 
 class LinksDialog(QDialog):

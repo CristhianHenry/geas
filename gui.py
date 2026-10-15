@@ -30,12 +30,11 @@ from manager import DownloadManager
 from settings import AppSettings
 from scheduler import Scheduler
 from download_dialog import DownloadDialog, open_path, open_folder
-from smart_download_dialog import SmartDownloadDialog
 from video_quality_dialog import VideoQualityDialog
 from file_info_dialog import FileInfoDialog, UrlProbeThread
 from options_dialog import OptionsDialog
 from refresh_dialog import RefreshAddressDialog
-from links_dialog import LinksDialog
+from links_dialog import LinksDialog, PageLinksThread
 from playlist_dialog import PlaylistDialog
 from scheduler_dialog import SchedulerDialog
 from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow, CountdownDialog
@@ -44,7 +43,8 @@ from browser_context import BrowserContext
 from enhanced_downloader import sanitize_filename, unique_path, filename_from_url
 from file_categories import CATEGORIES, category_of
 from media_handler import find_ffmpeg
-from ui_format import format_size, format_speed, format_eta, format_date, format_percent, describe_status
+from ui_format import (format_size, format_speed, format_eta, format_date, format_percent, describe_status,
+                       friendly_error)
 from api_server import start_server
 from remote_server import RemoteServer, new_token
 from remote_dialog import RemoteDialog
@@ -257,7 +257,8 @@ class DownloadApp(QMainWindow):
         self.act_options = self._action("options", "Opciones", self.show_options)
         self.act_scheduler = self._action("scheduler", "Programador", self.show_scheduler)
         self.act_browser = self._action("browser", "Navegador", self.show_browser, tip="Navegador integrado")
-        self.act_smart = self._action("smart", "Detector", self.open_smart_detector, tip="Detector inteligente de enlaces")
+        self.act_smart = self._action("smart", "Enlaces de página", self.open_page_links,
+                                      tip="Elegir y descargar archivos de los enlaces de una página")
         self.act_remote = self._action(None, "Control desde el celular…", self.show_remote_dialog,
                                        tip="Añadir y ver descargas desde el navegador del celular")
         self.act_log = self._action("log", "Actividad", self.show_log, tip="Lo que hizo Geas: descargas, errores y avisos")
@@ -1047,19 +1048,32 @@ class DownloadApp(QMainWindow):
                           "Descargas multi-conexión, videos con yt-dlp (HLS/DASH), conversión a H.264 "
                           "y captura de descargas del navegador.")
 
-    def open_smart_detector(self):
-        """Abre el detector inteligente de descargas"""
-        try:
-            clipboard_text = QApplication.clipboard().text().strip()
-            if not (clipboard_text.startswith(('http://', 'https://')) or 'www.' in clipboard_text):
-                clipboard_text = ""
-            dialog = SmartDownloadDialog(self.manager, self, clipboard_text)
-            if dialog.exec() == QDialog.Accepted:
-                self.log_message("Detector inteligente completado")
-                self.refresh_list()
-        except Exception as e:
-            self.logger.error(f"Error abriendo detector inteligente: {e}")
-            QMessageBox.critical(self, "Error", f"Error al abrir el detector inteligente:\n{str(e)}")
+    def open_page_links(self):
+        """Enlaces de una página: Geas los lee y se elige cuáles descargar (como con la extensión)."""
+        dialog = AddUrlDialog(self, title="Enlaces de página", label="Dirección de la página:",
+                              hint="Geas leerá todos los enlaces de la página para que elijas cuáles descargar. "
+                                   "Con la extensión también puedes hacerlo con clic derecho en la página.",
+                              icon="smart")
+        if dialog.exec() != QDialog.Accepted or not dialog.url():
+            return
+        url = dialog.url()
+        if not self.is_valid_url(url):
+            QMessageBox.warning(self, "Geas", "El enlace no es válido: debe empezar con http:// o https://")
+            return
+        thread = PageLinksThread(url)
+        self._probe_threads.add(thread)  # que Qt no lo destruya mientras lee
+        thread.finished.connect(lambda: self._probe_threads.discard(thread))
+        self.status_label.setText("Leyendo los enlaces de la página…")
+
+        def on_done(title, links, error):
+            if error:
+                self.log_message(f"No se pudieron leer los enlaces de {url[:150]}: {error}")
+                QMessageBox.warning(self, "Geas", f"No se pudo leer la página:\n{friendly_error(error)}")
+            else:
+                self.show_links_dialog({"links": links, "title": title, "url": url}, BrowserContext())
+
+        thread.done.connect(on_done)
+        thread.start()
 
     # ------------------------------------------------------------------
     # Inicio de descargas

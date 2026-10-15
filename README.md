@@ -248,7 +248,6 @@ geas/
 ├── ytdlp_updater.py             # Versión y actualización de yt-dlp
 ├── ytdlp_dialog.py              # Ventana "Actualizar yt-dlp"
 ├── media_handler.py             # Manejador de videos (yt-dlp)
-├── url_detector.py              # Detector de URLs y medios
 ├── browser_context.py           # Cookies/cabeceras del navegador para cada descarga
 ├── file_info_dialog.py          # Diálogo de descarga para archivos del navegador
 ├── api_server.py                # Servidor API Flask
