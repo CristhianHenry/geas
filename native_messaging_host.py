@@ -43,6 +43,7 @@ logging.basicConfig(
 # La API es local: no pasar por proxies configurados en el sistema
 session = requests.Session()
 session.trust_env = False
+session.headers["X-Geas-Extension"] = "1"  # Geas sabe así que la extensión está conectada (asistente de bienvenida)
 
 
 def get_message():

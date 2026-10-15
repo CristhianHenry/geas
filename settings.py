@@ -27,6 +27,8 @@ DEFAULT_CONFIG = {
     "remote_enabled": False,        # control desde el celular (escucha en la red solo si está activo)
     "remote_port": 8767,
     "remote_token": "",             # código secreto del celular, cifrado
+    "welcome_shown": False,         # el asistente de bienvenida ya se mostró
+    "extension_seen": False,        # la extensión del navegador ya se conectó alguna vez
     "app_last_check": "",           # fecha de la última búsqueda
     "ytdlp_last_check": "",         # fecha de la última comprobación
     "ytdlp_latest_seen": ""         # última versión publicada que se vio

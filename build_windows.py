@@ -76,6 +76,8 @@ def main():
     app_dir = DIST / "Geas"
     write_host_manifests(app_dir)
     shutil.copytree(ROOT / "licenses", app_dir / "licenses", dirs_exist_ok=True)
+    # La extensión va con el programa: el asistente de bienvenida enseña a cargarla desde aquí
+    shutil.copytree(ROOT / "extension", app_dir / "extension", dirs_exist_ok=True)
     print(f"\nPrograma listo en {app_dir}")
 
     iscc = find_iscc()

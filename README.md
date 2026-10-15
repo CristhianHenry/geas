@@ -60,6 +60,8 @@
 
 Ejecuta `Geas-Setup-<versión>.exe`. Se instala para tu usuario (no pide permisos de administrador) en `%LOCALAPPDATA%\Programs\Geas`, registra la conexión con Chrome, Edge y Firefox, y guarda tus datos (opciones, historial, registro) en `%APPDATA%\Geas`. No hace falta instalar Python. Windows puede mostrar "Windows protegió tu PC" porque el instalador no está firmado: "Más información" → "Ejecutar de todas formas".
 
+La primera vez se abre **Primeros pasos**: explica cómo cargar la extensión (viene en la carpeta `extension` de la instalación) y ofrece instalar ffmpeg.
+
 Geas instalada actualiza yt-dlp desde **Ayuda → Actualizar yt-dlp** y, si `UPDATE_REPO` de `version.py` apunta al repositorio de GitHub, busca versiones nuevas de sí misma una vez al día.
 
 **Generar el instalador:**

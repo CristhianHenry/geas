@@ -48,6 +48,8 @@ from ui_format import (format_size, format_speed, format_eta, format_date, forma
 from api_server import start_server
 from remote_server import RemoteServer, new_token
 from remote_dialog import RemoteDialog
+from welcome_dialog import WelcomeDialog
+import api_server
 
 # Tipos que son listas de reproducción (se analizan con yt-dlp, no se descargan tal cual)
 STREAM_CONTENT_TYPES = {
@@ -218,6 +220,8 @@ class DownloadApp(QMainWindow):
                     self.manager.history.update_entry(entry_id, touch=False, auto_resume=None)
             self._check_ytdlp_updates()
             self._check_app_updates()
+            if not self.app_settings.get("welcome_shown"):
+                QTimer.singleShot(600, self.show_welcome)  # la primera vez, con la ventana ya a la vista
 
         except Exception as e:
             self.logger.error(f"Error al inicializar la aplicación: {e}")
@@ -274,6 +278,8 @@ class DownloadApp(QMainWindow):
         self.act_update_ytdlp = self._action("redownload", "Actualizar yt-dlp…", self.show_ytdlp_updater,
                                              tip="Actualizar el componente que reconoce los videos de las páginas")
         self.act_about = self._action("app", "Acerca de Geas", self.show_about)
+        self.act_welcome = self._action(None, "Primeros pasos…", self.show_welcome,
+                                        tip="Conectar el navegador, instalar ffmpeg y cómo descargar")
         self.act_app_update = self._action("redownload", "Buscar actualizaciones de Geas…",
                                            lambda: self.show_app_updater())
         self.act_app_update.setVisible(app_updater.enabled())
@@ -319,6 +325,8 @@ class DownloadApp(QMainWindow):
         view.addActions([self.act_browser, self.act_log])
 
         help_menu = bar.addMenu("A&yuda")
+        help_menu.addAction(self.act_welcome)
+        help_menu.addSeparator()
         help_menu.addActions([self.act_app_update, self.act_update_ytdlp])
         help_menu.addSeparator()
         help_menu.addAction(self.act_about)
@@ -1068,6 +1076,17 @@ class DownloadApp(QMainWindow):
         self.log_window.show()
         self.log_window.raise_()
         self.log_window.activateWindow()
+
+    def extension_connected(self):
+        """True si la extensión ya habló con Geas alguna vez (se recuerda entre sesiones)."""
+        if api_server.last_extension_contact and not self.app_settings.get("extension_seen"):
+            self.app_settings.set("extension_seen", True)
+        return bool(api_server.last_extension_contact or self.app_settings.get("extension_seen"))
+
+    def show_welcome(self):
+        WelcomeDialog(self.extension_connected, self).exec()
+        self.app_settings.set("welcome_shown", True)
+        self._update_ffmpeg_label()  # por si se instaló ffmpeg desde el asistente
 
     def show_about(self):
         QMessageBox.about(self, "Acerca de Geas",

@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import logging
+import time
 from typing import Optional, Callable
 
 from version import __version__
@@ -9,6 +10,15 @@ ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 # Orígenes de extensiones; el host nativo (Python) no envía Origin
 EXTENSION_ORIGINS = ("chrome-extension://", "moz-extension://", "extension://")
 DOWNLOAD_KINDS = {"file", "video", "stream", "auto", "links"}  # links: "Descargar todos los enlaces"
+
+# Última vez que la extensión habló con Geas (el host nativo se identifica con X-Geas-Extension)
+last_extension_contact = 0.0
+
+
+def _note_extension_contact():
+    global last_extension_contact
+    if request.headers.get("X-Geas-Extension"):
+        last_extension_contact = time.time()
 
 
 class GeasServer:
@@ -62,6 +72,7 @@ class GeasServer:
 
     def _download_file(self):
         """Endpoint para recibir descargas desde el navegador"""
+        _note_extension_contact()
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"error": "No se recibieron datos"}), 400
@@ -90,6 +101,7 @@ class GeasServer:
 
     def _check_server(self):
         """Endpoint para verificar que el servidor está corriendo"""
+        _note_extension_contact()
         return jsonify({"status": "running", "app": "Geas", "version": __version__}), 200
 
     def _get_status(self):
