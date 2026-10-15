@@ -42,7 +42,7 @@ class SchedulerDialog(QDialog):
         add_button = QPushButton(icons.icon("scheduler"), "Programar")
         add_button.setObjectName("PrimaryButton")
         add_button.clicked.connect(self.schedule)
-        grid.addWidget(QLabel("URL:"), 0, 0)
+        grid.addWidget(QLabel("Enlace:"), 0, 0)
         grid.addWidget(self.url_input, 0, 1, 1, 2)
         grid.addWidget(QLabel("Guardar como:"), 1, 0)
         grid.addWidget(self.path_input, 1, 1)
@@ -54,7 +54,7 @@ class SchedulerDialog(QDialog):
 
         layout.addWidget(QLabel("Descargas programadas:"))
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Archivo", "Inicio", "Estado", "URL"])
+        self.table.setHorizontalHeaderLabels(["Archivo", "Inicio", "Estado", "Enlace"])
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 220)
         self.table.setColumnWidth(1, 120)
@@ -95,7 +95,7 @@ class SchedulerDialog(QDialog):
         path = self.path_input.text().strip()
         start_time = self.time_input.dateTime().toPython()
         if not self.is_valid_url(url):
-            QMessageBox.warning(self, "Programador", "La URL no es válida.")
+            QMessageBox.warning(self, "Programador", "El enlace no es válido.")
             return
         if not path:
             QMessageBox.warning(self, "Programador", "Indica dónde guardar el archivo.")

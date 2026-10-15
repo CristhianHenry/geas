@@ -221,7 +221,7 @@ class DownloadApp(QMainWindow):
 
         except Exception as e:
             self.logger.error(f"Error al inicializar la aplicación: {e}")
-            QMessageBox.critical(self, "Error Fatal", f"No se pudo inicializar la aplicación:\n{str(e)}")
+            QMessageBox.critical(self, "Geas no pudo iniciar", f"No se pudo iniciar Geas:\n{str(e)}")
             sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -245,10 +245,10 @@ class DownloadApp(QMainWindow):
         return action
 
     def _create_actions(self):
-        self.act_add = self._action("add", "Añadir URL", self.add_url, "Ctrl+N", "Añadir una descarga (Ctrl+N)")
+        self.act_add = self._action("add", "Añadir enlace", self.add_url, "Ctrl+N", "Añadir una descarga a partir de un enlace (Ctrl+N)")
         self.act_resume = self._action("resume", "Reanudar", self.resume_selected, tip="Reanudar las descargas seleccionadas")
-        self.act_stop = self._action("stop", "Detener", self.stop_selected, tip="Detener (pausar) las descargas seleccionadas")
-        self.act_stop_all = self._action("stop_all", "Detener todas", self.stop_all)
+        self.act_stop = self._action("pause", "Pausar", self.stop_selected, tip="Pausar las descargas seleccionadas")
+        self.act_stop_all = self._action("pause_all", "Pausar todas", self.stop_all, tip="Pausar todas las descargas")
         self.act_resume_all = self._action(None, "Reanudar todas", self.resume_all)
         self.act_delete = self._action("delete", "Eliminar", self.delete_selected, QKeySequence.Delete,
                                        "Quitar las descargas seleccionadas de la lista (Supr)")
@@ -260,15 +260,15 @@ class DownloadApp(QMainWindow):
         self.act_smart = self._action("smart", "Detector", self.open_smart_detector, tip="Detector inteligente de enlaces")
         self.act_remote = self._action(None, "Control desde el celular…", self.show_remote_dialog,
                                        tip="Añadir y ver descargas desde el navegador del celular")
-        self.act_log = self._action("log", "Registro", self.show_log, tip="Registro de actividad")
+        self.act_log = self._action("log", "Actividad", self.show_log, tip="Lo que hizo Geas: descargas, errores y avisos")
         self.act_open = self._action("open", "Abrir", self.open_selected)
         self.act_open_folder = self._action("folder", "Abrir carpeta", self.open_selected_folder)
         self.act_progress = self._action("progress", "Mostrar progreso", self.show_selected_progress)
         self.act_redownload = self._action("redownload", "Descargar de nuevo", self.redownload_selected)
         self.act_refresh_address = self._action(None, "Actualizar dirección de descarga…", self.refresh_address_selected,
                                                 tip="Enlace nuevo para seguir una descarga cuyo enlace venció")
-        self.act_copy_url = self._action("copy", "Copiar URL", self.copy_selected_url)
-        self.act_paste = self._action(None, "Pegar URL y descargar", self.paste_and_analyze, "Ctrl+V")
+        self.act_copy_url = self._action("copy", "Copiar enlace", self.copy_selected_url)
+        self.act_paste = self._action(None, "Pegar enlace y descargar", self.paste_and_analyze, "Ctrl+V")
         self.act_quit = self._action(None, "Salir", self.force_quit, "Ctrl+Q")
         self.act_update_ytdlp = self._action("redownload", "Actualizar yt-dlp…", self.show_ytdlp_updater,
                                              tip="Actualizar el componente que reconoce los videos de las páginas")
@@ -479,7 +479,9 @@ class DownloadApp(QMainWindow):
         item.setData(COL_SIZE, SORT_ROLE, int(total or 0))
 
         item.setText(COL_STATUS, text)
-        item.setToolTip(COL_STATUS, text)
+        # Con error: la explicación y, debajo, el detalle técnico (para buscarlo o reportarlo)
+        detail = status[len("error"):].strip(" :") if status.startswith("error") else ""
+        item.setToolTip(COL_STATUS, f"{text}\n\nDetalle: {detail}" if detail else text)
         item.setData(COL_STATUS, PROGRESS_ROLE, progress)
         item.setData(COL_STATUS, SORT_ROLE, text.lower())
         item.setForeground(COL_STATUS, QBrush(theme.color("#c42b1c" if status.startswith("error") else "#1b1b1b")))
@@ -568,7 +570,7 @@ class DownloadApp(QMainWindow):
         if queued:
             text += f" · {queued} en cola (máximo {self.manager.max_active} a la vez)"
         if waiting:
-            text += f" · {waiting} en pausa o en espera"
+            text += f" · {waiting} en pausa o pendientes"
         if self.finish_action != power_actions.NOTHING:
             text += f" · Al terminar: {power_actions.LABELS[self.finish_action]}"
         self.status_label.setText(text)
@@ -696,7 +698,7 @@ class DownloadApp(QMainWindow):
     def process_new_url(self, url):
         """Descarga añadida a mano: video de una página o archivo (se consulta la URL para saberlo)."""
         if not self.is_valid_url(url):
-            QMessageBox.warning(self, "Geas", "La URL no es válida. Debe comenzar con http:// o https://")
+            QMessageBox.warning(self, "Geas", "El enlace no es válido: debe empezar con http:// o https://")
             return
         if self.is_video_url(url):
             self.show_video_quality_dialog(url)
@@ -743,7 +745,7 @@ class DownloadApp(QMainWindow):
             status = statuses[task_id]
             if status in STOPPABLE_STATES or status.startswith("convirtiendo"):
                 self.manager.pause_download(task_id)
-        self.log_message("Todas las descargas detenidas")
+        self.log_message("Todas las descargas en pausa")
         self.refresh_list()
 
     def resume_all(self):
@@ -1268,7 +1270,7 @@ class DownloadApp(QMainWindow):
         try:
             reply = QMessageBox.question(
                 self, "Video detectado",
-                f"Se detectó un video en esta página.\n¿Quieres analizarlo para descargar?\n\nURL: {url[:80]}…",
+                f"Se detectó un video en esta página.\n¿Quieres analizarlo para descargar?\n\nEnlace: {url[:80]}…",
                 QMessageBox.Yes | QMessageBox.No
             )
             if reply == QMessageBox.Yes:

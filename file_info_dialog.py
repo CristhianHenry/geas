@@ -55,7 +55,7 @@ class FileInfoDialog(QDialog):
         url_field = QLineEdit(url)
         url_field.setReadOnly(True)
         url_field.setCursorPosition(0)
-        grid.addWidget(QLabel("URL:"), 0, 0)
+        grid.addWidget(QLabel("Enlace:"), 0, 0)
         grid.addWidget(url_field, 0, 1, 1, 2)
 
         self.path_input = QLineEdit(save_path)

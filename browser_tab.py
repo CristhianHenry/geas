@@ -74,7 +74,7 @@ class BrowserTab(QWidget):
         
         self.url_bar = QLineEdit()
         self.url_bar.returnPressed.connect(self.navigate_to_url)
-        self.url_bar.setPlaceholderText("Escribe una URL (ej: youtube.com)")
+        self.url_bar.setPlaceholderText("Escribe una dirección (ej: youtube.com)")
         
         self.go_btn = QPushButton("Ir")
         self.go_btn.clicked.connect(self.navigate_to_url)

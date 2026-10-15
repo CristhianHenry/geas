@@ -15,7 +15,7 @@ class AddUrlDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Añadir URL")
+        self.setWindowTitle("Añadir enlace")
         self.setWindowIcon(icons.icon("add"))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.setMinimumWidth(560)
@@ -139,7 +139,7 @@ class LogWindow(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Registro de Geas")
+        self.setWindowTitle("Actividad de Geas")
         self.setWindowIcon(icons.icon("log"))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.resize(760, 420)
@@ -177,4 +177,4 @@ class LogWindow(QDialog):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(self.text.toPlainText())
             except OSError as e:
-                QMessageBox.warning(self, "Registro", f"No se pudo guardar:\n{e}")
+                QMessageBox.warning(self, "Actividad", f"No se pudo guardar:\n{e}")

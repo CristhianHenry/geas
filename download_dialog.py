@@ -135,7 +135,7 @@ class DownloadDialog(QDialog):
         grid = QGridLayout(status_tab)
         grid.setColumnStretch(1, 1)
         grid.setHorizontalSpacing(12)
-        self.url_value = self._field(grid, 0, "URL:")
+        self.url_value = self._field(grid, 0, "Enlace:")
         self.url_value.setWordWrap(True)
         self.status_value = self._field(grid, 1, "Estado:")
         self.size_value = self._field(grid, 2, "Tamaño del archivo:")
@@ -174,7 +174,7 @@ class DownloadDialog(QDialog):
         buttons = QHBoxLayout()
         self.details_button = QPushButton("<< Ocultar detalles")
         self.details_button.clicked.connect(self.toggle_details)
-        self.pause_button = QPushButton("Pausa")
+        self.pause_button = QPushButton("Pausar")
         self.pause_button.clicked.connect(self.toggle_pause)
         self.cancel_button = QPushButton("Cancelar")
         self.cancel_button.clicked.connect(self.cancel_download)
@@ -307,6 +307,7 @@ class DownloadDialog(QDialog):
         self.url_value.setText(status["url"] if len(status["url"]) <= 160 else status["url"][:157] + "…")
         self.url_value.setToolTip(status["url"])
         self.status_value.setText(describe_status(state))
+        self.status_value.setToolTip(state[len("error"):].strip(" :") if state.startswith("error") else "")
         object_name = "Error" if state.startswith("error") else ""
         if self.status_value.objectName() != object_name:
             # El color sale de style.qss (QLabel#Error): hay que volver a aplicar el estilo
@@ -325,7 +326,7 @@ class DownloadDialog(QDialog):
         self.progress_bar.setFormat(format_percent(fraction * 100))
 
         finished = state.startswith(("error", "cancelado"))
-        self.pause_button.setText("Reanudar" if state in ("pausado", "en espera") else "Pausa")
+        self.pause_button.setText("Reanudar" if state in ("pausado", "en espera") else "Pausar")
         self.pause_button.setEnabled(not finished and not state.startswith("convirtiendo"))
         self.cancel_button.setText("Cerrar" if finished else "Cancelar")
         self.tabs.setTabEnabled(1, getattr(self._task(), "worker", None) is not None)

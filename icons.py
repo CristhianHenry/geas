@@ -25,8 +25,6 @@ _TRASH = ('<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="0"><stop offset
 _CHECK_BADGE = ('<circle cx="24" cy="24" r="7" fill="#2fa84f" stroke="#1d7a37" stroke-width="1"/>'
                 '<path d="M20.5 24 L23 26.5 L27.5 21.5" stroke="#fff" stroke-width="2.4" fill="none" '
                 'stroke-linecap="round" stroke-linejoin="round"/>')
-_STOP_GRADIENT = ('<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b5e"/>'
-                  '<stop offset="1" stop-color="#d0281b"/></linearGradient></defs>')
 _PAGE = ('<path d="M7 3 H20 L26 9 V29 H7 Z" fill="#ffffff" stroke="{stroke}" stroke-width="1.5" stroke-linejoin="round"/>'
          '<path d="M20 3 V9 H26" fill="#e3e8ee" stroke="{stroke}" stroke-width="1.5" stroke-linejoin="round"/>')
 _FOLDER = ('<defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd86b"/>'
@@ -43,12 +41,17 @@ _SVG = {
               '<stop offset="1" stop-color="#23943f"/></linearGradient></defs>'
               '<circle cx="16" cy="16" r="13" fill="url(#g)" stroke="#1b7a33" stroke-width="1"/>'
               '<path d="M12.5 9.5 L23 16 L12.5 22.5 Z" fill="#fff"/>',
-    "stop": f'{_STOP_GRADIENT}<polygon points="11,3 21,3 29,11 29,21 21,29 11,29 3,21 3,11" fill="url(#s)" '
-            'stroke="#a51e14" stroke-width="1"/><rect x="11" y="11" width="10" height="10" rx="1" fill="#fff"/>',
-    "stop_all": f'{_STOP_GRADIENT}<polygon points="9,2 16,2 22,8 22,15 16,21 9,21 3,15 3,8" fill="url(#s)" '
-                'stroke="#a51e14" stroke-width="1" opacity="0.8"/>'
-                '<polygon points="16,10 23,10 29,16 29,23 23,29 16,29 10,23 10,16" fill="url(#s)" stroke="#a51e14" '
-                'stroke-width="1"/><rect x="15.5" y="15.5" width="8" height="8" rx="1" fill="#fff"/>',
+    "pause": '<defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc35a"/>'
+             '<stop offset="1" stop-color="#e8890c"/></linearGradient></defs>'
+             '<circle cx="16" cy="16" r="13" fill="url(#p)" stroke="#b86a05" stroke-width="1"/>'
+             '<rect x="11" y="9.5" width="3.6" height="13" rx="1" fill="#fff"/>'
+             '<rect x="17.4" y="9.5" width="3.6" height="13" rx="1" fill="#fff"/>',
+    "pause_all": '<defs><linearGradient id="p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc35a"/>'
+                 '<stop offset="1" stop-color="#e8890c"/></linearGradient></defs>'
+                 '<circle cx="11" cy="11" r="9" fill="url(#p)" stroke="#b86a05" stroke-width="1" opacity="0.8"/>'
+                 '<circle cx="20" cy="20" r="10" fill="url(#p)" stroke="#b86a05" stroke-width="1"/>'
+                 '<rect x="16" y="15" width="3" height="10" rx="1" fill="#fff"/>'
+                 '<rect x="21" y="15" width="3" height="10" rx="1" fill="#fff"/>',
     "delete": _TRASH,
     "delete_done": _TRASH + _CHECK_BADGE,
     "options": '<g transform="translate(16 16)" fill="#6f7b88">'
