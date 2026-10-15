@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QToolBar, QMenu, QMessageBox, QDialog, QLabel,
     QSystemTrayIcon, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
-from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess
+from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess, QEvent
 from PySide6.QtGui import QAction, QActionGroup, QLinearGradient, QKeySequence, QBrush
 
 import icons
@@ -379,6 +379,13 @@ class DownloadApp(QMainWindow):
         self.list.sortByColumn(COL_DATE, Qt.DescendingOrder)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self.show_list_menu)
+        # Lista vacía: en vez de un espacio en blanco, cómo empezar
+        self.empty_hint = QLabel(self.list.viewport())
+        self.empty_hint.setObjectName("EmptyHint")
+        self.empty_hint.setAlignment(Qt.AlignCenter)
+        self.empty_hint.setWordWrap(True)
+        self.empty_hint.setAttribute(Qt.WA_TransparentForMouseEvents)  # el clic derecho sigue llegando a la lista
+        self.list.viewport().installEventFilter(self)
         self.list.itemDoubleClicked.connect(self.on_item_double_clicked)
         self.list.itemSelectionChanged.connect(self.update_actions)
         header = self.list.header()
@@ -547,6 +554,27 @@ class DownloadApp(QMainWindow):
             else:
                 visible = key == f"cat:{item.data(COL_NAME, CATEGORY_ROLE)}"
             item.setHidden(not visible)
+        self._update_empty_hint()
+
+    def _update_empty_hint(self):
+        visible = any(not item.isHidden() for item in self.items.values())
+        if not self.items:
+            text = ("Todavía no hay descargas.\n\nDescarga algo en el navegador (con la extensión de Geas), "
+                    "pega un enlace con Ctrl+V o usa «Añadir enlace».")
+        else:
+            text = "No hay descargas en esta categoría."
+        self.empty_hint.setText(text)
+        self.empty_hint.setGeometry(self.list.viewport().rect().adjusted(24, 24, -24, -24))
+        self.empty_hint.setVisible(not visible)
+
+    def eventFilter(self, watched, event):
+        if watched is self.list.viewport() and event.type() == QEvent.Resize:
+            self.empty_hint.setGeometry(watched.rect().adjusted(24, 24, -24, -24))
+        return super().eventFilter(watched, event)
+
+    def flash(self, text):
+        """Aviso breve en la barra de estado (p. ej. al añadir una descarga)."""
+        self.statusBar().showMessage(text, 5000)
 
     def _update_counts(self, live):
         counts = {"all": len(self.items), "finished": 0, "unfinished": 0}
@@ -1092,6 +1120,7 @@ class DownloadApp(QMainWindow):
         )
         if batch:
             return task_id  # quien añade el lote avisa y refresca la lista una sola vez
+        self.flash(f"Añadida: {os.path.basename(save_path)}")
         self.log_message(f"Nueva descarga {'añadida' if start else 'en espera'}: {os.path.basename(save_path)}")
         if start and self.app_settings.get("show_progress_dialog"):
             self.show_progress_dialog(task_id)
@@ -1128,6 +1157,7 @@ class DownloadApp(QMainWindow):
             used.add(path.lower())
             self.start_file_download(url, path, headers=context.http_headers(), cookies=context.cookie_jar(), batch=True)
         self.log_message(f"{len(urls)} enlaces añadidos a la cola desde {str(payload.get('url', ''))[:150]}")
+        self.flash(f"{len(urls)} descargas añadidas a la cola")
         self.refresh_list()
 
     def show_video_quality_dialog(self, url, context=None, prefer_stream=False, from_browser=False, replace_entry=None):
@@ -1157,6 +1187,7 @@ class DownloadApp(QMainWindow):
                 if replace_entry:
                     self.manager.remove_task(replace_entry)
                     self.manager.history.remove_entries([replace_entry])
+                self.flash(f"Añadida: {os.path.basename(info['save_path'])}")
                 self.log_message(f"Iniciada descarga de video: {os.path.basename(info['save_path'])} "
                                  f"(formato {info['format_id']}, desde {info['url'][:150]})")
                 if info['start_now'] and self.app_settings.get("show_progress_dialog"):
@@ -1184,6 +1215,7 @@ class DownloadApp(QMainWindow):
         if subtitles:
             self.app_settings.set("subtitle_language", subtitles["lang"])
         self.log_message(f"Lista «{playlist['title']}»: {len(downloads)} videos añadidos a la cola")
+        self.flash(f"{len(downloads)} videos de «{playlist['title']}» añadidos a la cola")
         self.refresh_list()
 
     # ------------------------------------------------------------------
@@ -1373,6 +1405,7 @@ class DownloadApp(QMainWindow):
             self.manager.add_yt_download(result["url"], path, result["format"], source=result.get("source"),
                                          convert_h264=self.app_settings.get("convert_to_h264"))
         self.log_message(f"Descarga añadida desde el celular: {os.path.basename(path)}")
+        self.flash(f"Añadida desde el celular: {os.path.basename(path)}")
         self.notify("Descarga añadida desde el celular", os.path.basename(path))
         self.refresh_list()
 

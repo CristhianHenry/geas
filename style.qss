@@ -245,6 +245,10 @@ QLabel#FieldName {
 QLabel#Hint {
     color: #666666;
 }
+QLabel#EmptyHint {
+    color: #666666;
+    font-size: 10.5pt;
+}
 QLabel#Warning {
     color: #a15c00;
 }
