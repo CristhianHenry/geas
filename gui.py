@@ -35,6 +35,7 @@ from file_info_dialog import FileInfoDialog, UrlProbeThread
 from options_dialog import OptionsDialog
 from refresh_dialog import RefreshAddressDialog
 from links_dialog import LinksDialog
+from playlist_dialog import PlaylistDialog
 from scheduler_dialog import SchedulerDialog
 from simple_dialogs import AddUrlDialog, DeleteDialog, LogWindow, CountdownDialog
 from browser_tab import BrowserTab
@@ -1102,7 +1103,10 @@ class DownloadApp(QMainWindow):
                                         ffmpeg=bool(find_ffmpeg()))
             if from_browser:
                 self.bring_to_front(dialog)
-            if dialog.exec() == QDialog.Accepted:
+            result = dialog.exec()
+            if result == VideoQualityDialog.PLAYLIST:
+                self.show_playlist_dialog(dialog.playlist, context, from_browser)
+            elif result == QDialog.Accepted:
                 info = dialog.get_download_info()
                 # Descargar con las cookies/cabeceras con las que se analizó
                 task_id = self.manager.add_yt_download(info['url'], info['save_path'], info['format_id'],
@@ -1123,6 +1127,25 @@ class DownloadApp(QMainWindow):
         except Exception as e:
             self.logger.error(f"Error en diálogo de video: {e}")
             QMessageBox.warning(self, "Error", f"Error al procesar video:\n{str(e)}")
+
+    def show_playlist_dialog(self, playlist, context=None, from_browser=False):
+        """Lista de reproducción o canal: se eligen los videos y una calidad, y van todos a la cola."""
+        dialog = PlaylistDialog(playlist, self.folder_for("video.mp4"), self.folder_for("audio.mp3"),
+                                self.app_settings.get("subtitle_language"), self)
+        if from_browser:
+            self.bring_to_front(dialog)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        convert = self.app_settings.get("convert_to_h264")
+        subtitles = dialog.subtitle_choice()
+        downloads = dialog.downloads()
+        for url, path in downloads:
+            self.manager.add_yt_download(url, unique_path(path), dialog.format_id(), context=context,
+                                         convert_h264=convert, subtitles=subtitles)
+        if subtitles:
+            self.app_settings.set("subtitle_language", subtitles["lang"])
+        self.log_message(f"Lista «{playlist['title']}»: {len(downloads)} videos añadidos a la cola")
+        self.refresh_list()
 
     # ------------------------------------------------------------------
     # Solicitudes de la extensión del navegador

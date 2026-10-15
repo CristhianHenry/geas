@@ -26,6 +26,7 @@ class MediaInfoThread(QThread):
     """Hilo para obtener información del medio sin congelar la UI"""
     info_ready = Signal(object)
     error_occurred = Signal(str)
+    playlist_ready = Signal(object)  # la página es una lista: {'title', 'entries'}
 
     def __init__(self, url, context=None, prefer_stream=False):
         super().__init__()
@@ -36,26 +37,37 @@ class MediaInfoThread(QThread):
 
     def run(self):
         info, errors = self.handler.resolve(self.url, self.context, self.prefer_stream)
-        if not info:
+        if info:
+            # La miniatura se descarga aquí para no bloquear la interfaz
+            thumbnail_url = info.get('thumbnail')
+            if thumbnail_url:
+                try:
+                    info['_thumbnail_data'] = requests.get(thumbnail_url, timeout=5).content
+                except requests.RequestException:
+                    pass
+            self.info_ready.emit(info)
+
+        # Después, sin hacer esperar la elección de calidad: ¿es una lista de reproducción o un canal?
+        playlist = None
+        if self.handler.looks_like_playlist(self.url):
+            try:
+                playlist = self.handler.playlist_entries(self.url, self.context)
+            except Exception as e:
+                errors.append(str(e))
+        if playlist:
+            self.playlist_ready.emit(playlist)
+        elif not info:
             message = "No se encontró ningún video descargable en esta página."
             if errors:
                 message += "\n\nDetalles:\n" + "\n".join(f"• {e[:200]}" for e in errors[-3:])
             message += ("\n\nSi el sitio cambió hace poco, puede que haga falta una versión nueva de yt-dlp: "
                         "Ayuda → Actualizar yt-dlp.")
             self.error_occurred.emit(message)
-            return
-
-        # La miniatura se descarga aquí para no bloquear la interfaz
-        thumbnail_url = info.get('thumbnail')
-        if thumbnail_url:
-            try:
-                info['_thumbnail_data'] = requests.get(thumbnail_url, timeout=5).content
-            except requests.RequestException:
-                pass
-        self.info_ready.emit(info)
 
 
 class VideoQualityDialog(QDialog):
+    PLAYLIST = 2  # resultado de exec(): el usuario eligió descargar la lista completa
+
     def __init__(self, url, manager, parent=None, context=None, prefer_stream=False, folder=None,
                  convert_note=False, audio_folder=None, subtitle_lang="", ffmpeg=False):
         super().__init__(parent)
@@ -74,6 +86,7 @@ class VideoQualityDialog(QDialog):
         self.video_info = None
         self.video_title = None
         self.start_now = True
+        self.playlist = None  # lista de reproducción a la que pertenece el video, si la hay
         self.smart_formats = []
         self.raw_formats = []
 
@@ -110,6 +123,10 @@ class VideoQualityDialog(QDialog):
         info_layout.addWidget(self.duration_label)
         info_layout.addWidget(self.source_label)
         info_layout.addWidget(self.busy_bar)
+        self.playlist_button = QPushButton(icons.icon("video"), "")
+        self.playlist_button.clicked.connect(lambda: self.done(self.PLAYLIST))
+        self.playlist_button.hide()
+        info_layout.addWidget(self.playlist_button, 0, Qt.AlignLeft)
         info_layout.addStretch()
         header_layout.addWidget(self.thumb_label)
         header_layout.addLayout(info_layout, 1)
@@ -193,6 +210,7 @@ class VideoQualityDialog(QDialog):
     def start_analysis(self):
         self.thread = MediaInfoThread(self.url, self.context, self.prefer_stream)
         self.thread.info_ready.connect(self.on_info_ready)
+        self.thread.playlist_ready.connect(self.on_playlist_ready)
         self.thread.error_occurred.connect(self.on_error)
         self.thread.start()
 
@@ -240,6 +258,17 @@ class VideoQualityDialog(QDialog):
         self.smart_formats = self.media_handler.get_formats(info)
         self.raw_formats = self.media_handler.get_raw_formats(info)
         self.populate_table()
+
+    def on_playlist_ready(self, playlist):
+        if not self.isVisible():
+            return
+        self.playlist = playlist
+        if self.video_info is None:
+            self.done(self.PLAYLIST)  # la página es solo una lista o un canal: directo a elegir sus videos
+            return
+        self.playlist_button.setText(f"Descargar la lista completa ({len(playlist['entries'])} videos)…")
+        self.playlist_button.setToolTip(playlist['title'])
+        self.playlist_button.show()
 
     def populate_table(self):
         self.format_table.setRowCount(0)

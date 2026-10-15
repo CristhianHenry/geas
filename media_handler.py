@@ -569,6 +569,51 @@ class MediaHandler:
 
     # ------------------------------------------------------------------ descarga
 
+    def playlist_entries(self, url: str, context: Optional[BrowserContext] = None, limit: int = 1000) -> Optional[Dict]:
+        """
+        Videos de una lista de reproducción o de un canal, sin analizar cada uno
+        (rápido): {'title', 'entries': [{'url', 'title', 'duration'}]}, o None si
+        la página no es una lista o tiene un solo video.
+        """
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': 'in_playlist',
+            'playlistend': limit,
+            'socket_timeout': 20,
+            'http_headers': context.http_headers() if context else None,
+            'logger': _YdlLogger(),
+        }
+        _apply_proxy(ydl_opts)
+        with (context.cookie_file() if context else nullcontext()) as cookiefile:
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                tabs = [e for e in (info or {}).get('entries') or []
+                        if e and re.search(r"/(videos|shorts|streams|live|playlists)/?$", e.get('url') or '')]
+                if tabs:
+                    # Canal entero: yt-dlp entrega sus pestañas; se toma la de videos
+                    videos = next((t for t in tabs if re.search(r"/videos/?$", t['url'])), tabs[0])
+                    title = info.get('title')
+                    info = ydl.extract_info(videos['url'], download=False)
+                    info['title'] = title or info.get('title')
+        if not info or info.get('_type') != 'playlist':
+            return None
+        entries = []
+        for entry in info.get('entries') or []:
+            entry_url = (entry or {}).get('url') or (entry or {}).get('webpage_url')
+            if entry_url and entry_url.startswith(('http://', 'https://')):
+                entries.append({'url': entry_url, 'title': entry.get('title') or entry_url,
+                                'duration': entry.get('duration')})
+        return {'title': info.get('title') or 'Lista de reproducción', 'entries': entries} if len(entries) > 1 else None
+
+    @staticmethod
+    def looks_like_playlist(url: str) -> bool:
+        """La dirección parece de una lista o un canal (la de un video suelto no se consulta)."""
+        return bool(re.search(r"[?&]list=|/playlist\b|/channel/|/c/|/user/|/@[^/?#]+(/(videos|streams|shorts))?/?$"
+                              r"|/sets/|/album/", url or "", re.IGNORECASE))
+
     @staticmethod
     def subtitle_options(info: Dict) -> List[Dict]:
         """
@@ -610,8 +655,9 @@ class MediaHandler:
             'no_warnings': True,
             'noplaylist': True,
             'skip_download': True,
-            'writesubtitles': not subtitles.get('auto'),
-            'writeautomaticsub': bool(subtitles.get('auto')),
+            # auto: True = automáticos, False = los del autor, None = los del autor y si no hay, automáticos
+            'writesubtitles': subtitles.get('auto') is not True,
+            'writeautomaticsub': subtitles.get('auto') is not False,
             'subtitleslangs': [lang],
             'subtitlesformat': 'srt/vtt/best',
             'outtmpl': base + '.%(ext)s',
