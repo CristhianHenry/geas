@@ -1,8 +1,10 @@
 # enhanced_downloader.py - Downloader Mejorado Similar a IDM
 
 import requests
+import ctypes
 import os
 import re
+import sys
 import threading
 import time
 import hashlib
@@ -139,6 +141,41 @@ def url_probe(url: str, headers: Dict = None, cookies=None, timeout: int = 15) -
         return {'ok': False, 'error': str(e)}
     finally:
         session.close()
+
+
+if sys.platform == "win32":
+    import msvcrt
+    from ctypes import wintypes
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _kernel32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                                          wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                                          wintypes.LPVOID]
+    _kernel32.DeviceIoControl.restype = wintypes.BOOL
+    _kernel32.SetEndOfFile.argtypes = [wintypes.HANDLE]
+    _kernel32.SetEndOfFile.restype = wintypes.BOOL
+    _FSCTL_SET_SPARSE = 0x000900C4
+
+
+def _reserve_size(f, size: int):
+    """
+    Deja el .part con su tamaño final al instante, sin escribir ceros.
+
+    En Windows, truncate() agranda el archivo ESCRIBIENDO ceros (lo hace el CRT), y
+    SetEndOfFile a secas solo lo aplaza: NTFS rellena con ceros hasta donde escribe la
+    conexión que empieza más lejos. En un disco duro, 1 GiB eran ~9 s sin recibir nada
+    (medido el 16-oct). Un archivo disperso no se rellena: el espacio se ocupa a medida
+    que llegan los datos. Si el sistema de archivos no lo admite (FAT32, exFAT, algunas
+    unidades de red), se reserva como siempre.
+    """
+    if sys.platform == "win32":
+        handle = msvcrt.get_osfhandle(f.fileno())
+        done = wintypes.DWORD()
+        if _kernel32.DeviceIoControl(handle, _FSCTL_SET_SPARSE, None, 0, None, 0, ctypes.byref(done), None):
+            f.seek(size)
+            if _kernel32.SetEndOfFile(handle):
+                return
+    f.truncate(size)
 
 
 def _write_all(f, data):
@@ -439,7 +476,7 @@ class EnhancedDownloadTask:
     def _create_segments(self):
         """Archivo .part del tamaño final y un tramo inicial por conexión."""
         with open(self.part_path, 'wb') as f:
-            f.truncate(self.total_size)
+            _reserve_size(f, self.total_size)
         if self.total_size < 1024 * 1024:  # < 1MB: una sola parte
             count = 1
         else:
