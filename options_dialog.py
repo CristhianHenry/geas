@@ -237,6 +237,12 @@ class OptionsDialog(QDialog):
         self.convert = self._check("Convertir a H.264 los videos en AV1, VP9 o HEVC al terminar", "convert_to_h264",
                                    "El Reproductor de Windows, las teles y los móviles abren H.264 sin códecs extra")
         layout.addWidget(self.convert)
+        self.hardware = self._check("Usar la tarjeta gráfica para convertir (mucho más rápido)",
+                                    "hardware_encoding",
+                                    "NVIDIA, Intel Quick Sync o AMD. Si no hay o falla, se usa el procesador")
+        self.hardware.setEnabled(self.convert.isChecked())
+        self.convert.toggled.connect(self.hardware.setEnabled)
+        layout.addWidget(self.hardware)
         detail = QLabel("La conversión se hace después de descargar, con prioridad baja. Un capítulo de 24 min "
                         "en 1080p tarda unos minutos y el archivo final ocupa algo más.")
         detail.setObjectName("Hint")
@@ -294,6 +300,7 @@ class OptionsDialog(QDialog):
             "show_notifications": self.notifications.isChecked(),
             "minimize_to_tray": self.tray.isChecked(),
             "convert_to_h264": self.convert.isChecked(),
+            "hardware_encoding": self.hardware.isChecked(),
             "check_ytdlp_updates": self.check_ytdlp.isChecked(),
             "check_app_updates": self.check_app.isChecked(),
             "theme": self.theme.currentData(),

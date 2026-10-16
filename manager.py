@@ -151,6 +151,7 @@ class YtDownloadTask:
         self.source = source    # URL y cabeceras con las que se analizó el video
         self.convert_h264 = convert_h264  # convertir AV1/VP9/HEVC a H.264 al terminar
         self.subtitles = subtitles        # {'lang', 'auto', 'embed'} o None
+        self.encoder = None               # quién convierte a H.264 (gráfica o procesador)
         self.handler = MediaHandler()
         self._cancelled = False
         self._paused = False
@@ -182,7 +183,12 @@ class YtDownloadTask:
 
     def _on_convert_progress(self, percent):
         self.progress = int(percent)
-        self.status = f"convirtiendo a H.264 ({int(percent)} %)"
+        who = f" con {self.encoder}" if self.encoder else ""
+        self.status = f"convirtiendo a H.264{who} ({int(percent)} %)"
+
+    def _on_encoder(self, label):
+        self.encoder = label  # "Intel Quick Sync", "el procesador"...
+        self._on_convert_progress(0)
 
     def _convert_if_needed(self):
         """Convierte a H.264 si el video quedó en un formato que Windows no abre. Devuelve un aviso o None."""
@@ -193,7 +199,8 @@ class YtDownloadTask:
         self._on_convert_progress(0)
         try:
             video_converter.convert_to_h264(self.output_path, progress_callback=self._on_convert_progress,
-                                            is_cancelled=lambda: self._cancelled)
+                                            is_cancelled=lambda: self._cancelled,
+                                            encoder_callback=self._on_encoder)
             return None
         except video_converter.ConversionCancelled:
             raise Exception("DownloadCancelled")

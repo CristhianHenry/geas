@@ -16,6 +16,11 @@ from media_handler import MediaHandler
 from ui_format import format_size
 
 
+def _needs_conversion(codec):
+    """AV1, VP9 o HEVC: Geas lo convertirá a H.264 al terminar (tarda, sobre todo sin gráfica)."""
+    return str(codec).lower().startswith(("av01", "av1", "vp9", "vp09", "vp8", "hev", "hvc"))
+
+
 def safe_title(title):
     """Título apto como nombre de archivo (letras, números y ' .-_()')."""
     cleaned = "".join(c for c in (title or "") if c.isalpha() or c.isdigit() or c in " .-_()").strip(" .")
@@ -282,6 +287,8 @@ class VideoQualityDialog(QDialog):
                 continue
             size = f.get('filesize') or f.get('filesize_approx')
             codec = 'audio' if f['vcodec'] in (None, 'none') else f['vcodec']
+            if self.convert_note and f['type'] == 'video' and _needs_conversion(codec):
+                codec += " (se convertirá)"  # en una PC lenta conviene otra calidad
             self.add_row(f['resolution'], f['ext'], format_size(size) or "Desconocido", codec, f['format_id'], f['type'])
         if self.format_table.rowCount():
             self.format_table.selectRow(0)  # la mejor calidad, preseleccionada
