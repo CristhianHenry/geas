@@ -79,7 +79,7 @@ Deja el programa en `dist/Geas/` y el instalador en `dist/Geas-Setup-<versión>.
 ### 1. Clonar el Repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/geas.git
+git clone https://github.com/CristhianHenry/geas.git
 cd geas
 ```
 
@@ -387,7 +387,7 @@ Este proyecto está licenciado bajo la Licencia MIT. Ver el archivo `LICENSE` pa
 
 ## Soporte
 
-Si encuentras algún problema o tienes sugerencias, por favor abre un [issue](https://github.com/tu-usuario/geas/issues).
+Si encuentras algún problema o tienes sugerencias, por favor abre un [issue](https://github.com/CristhianHenry/geas/issues).
 
 ---
 
