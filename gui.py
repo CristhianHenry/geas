@@ -44,6 +44,7 @@ from browser_context import BrowserContext
 from enhanced_downloader import sanitize_filename, unique_path, filename_from_url
 from file_categories import CATEGORIES, category_of
 from media_handler import find_ffmpeg
+from ffmpeg_setup import FfmpegSetup
 from ui_format import (format_size, format_speed, format_eta, format_date, format_percent, describe_status,
                        friendly_error)
 from api_server import start_server
@@ -177,6 +178,9 @@ class DownloadApp(QMainWindow):
             video_converter.use_hardware = self.app_settings.get("hardware_encoding")
             self.manager = DownloadManager(max_active=self.app_settings.get("max_simultaneous_downloads"))
             self.scheduler = Scheduler(self.manager)
+            self.ffmpeg_setup = FfmpegSetup(self)  # si falta ffmpeg, Geas lo descarga sola
+            self.ffmpeg_setup.changed.connect(self._update_ffmpeg_label)
+            self.ffmpeg_setup.installed.connect(self._on_ffmpeg_installed)
 
             self.apply_stylesheet()
             QApplication.styleHints().colorSchemeChanged.connect(self._on_system_colors_changed)
@@ -222,6 +226,7 @@ class DownloadApp(QMainWindow):
                     self.manager.history.update_entry(entry_id, touch=False, auto_resume=None)
             self._check_ytdlp_updates()
             self._check_app_updates()
+            self.ffmpeg_setup.ensure()
             if not self.app_settings.get("welcome_shown"):
                 QTimer.singleShot(600, self.show_welcome)  # la primera vez, con la ventana ya a la vista
 
@@ -431,10 +436,26 @@ class DownloadApp(QMainWindow):
         self._update_ytdlp_label()
 
     def _update_ffmpeg_label(self):
-        folder = find_ffmpeg()
-        self.ffmpeg_label.setText("ffmpeg: listo" if folder else "ffmpeg: no instalado")
-        self.ffmpeg_label.setToolTip(folder or "Sin ffmpeg los videos no se reempaquetan ni se convierten a H.264.\n"
-                                               "Instálalo con: winget install --id Gyan.FFmpeg.Essentials -e")
+        setup = self.ffmpeg_setup
+        folder = None if setup.busy else find_ffmpeg()
+        if folder:
+            text, tip = "ffmpeg: listo", folder
+        elif setup.busy:
+            percent = setup.percent()
+            text = "ffmpeg: descargando…" if percent is None else (
+                "ffmpeg: preparando…" if percent >= 100 else f"ffmpeg: descargando {percent} %")
+            tip = ("Geas está descargando ffmpeg (una sola vez). Mientras tanto los videos de YouTube\n"
+                   "pueden bajar en menor calidad o sin convertir.")
+        else:
+            text = "ffmpeg: no instalado"
+            tip = (f"No se pudo descargar ffmpeg: {setup.error}.\n" if setup.error else "") + \
+                "Geas lo vuelve a intentar al abrirse, o desde Ayuda → Primeros pasos."
+        self.ffmpeg_label.setText(text)
+        self.ffmpeg_label.setToolTip(tip)
+
+    def _on_ffmpeg_installed(self, folder):
+        self.log_message(f"ffmpeg descargado en {folder}")
+        self.flash("ffmpeg listo: ya se pueden unir video y audio en alta calidad y convertir a H.264")
 
     # ------------------------------------------------------------------
     # Lista de descargas
@@ -1087,9 +1108,10 @@ class DownloadApp(QMainWindow):
         return bool(api_server.last_extension_contact or self.app_settings.get("extension_seen"))
 
     def show_welcome(self):
-        WelcomeDialog(self.extension_connected, self).exec()
+        dialog = WelcomeDialog(self.extension_connected, self.ffmpeg_setup, self)
+        dialog.exec()
+        dialog.deleteLater()
         self.app_settings.set("welcome_shown", True)
-        self._update_ffmpeg_label()  # por si se instaló ffmpeg desde el asistente
 
     def show_about(self):
         QMessageBox.about(self, "Acerca de Geas",
@@ -1515,6 +1537,7 @@ class DownloadApp(QMainWindow):
         try:
             self.timer.stop()
             self.remote.stop()
+            self.ffmpeg_setup.cancel()  # una descarga de ffmpeg a medias se borra y sigue la próxima vez
             self.toggle_clipboard_monitor(False)
             for window in [*self.dialogs.values(), self.browser_window, self.scheduler_dialog, self.ytdlp_dialog,
                            self.log_window]:

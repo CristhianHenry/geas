@@ -27,3 +27,9 @@ Beautiful Soup 4, soupsieve, lxml
 
 qrcode
   Licencia: BSD-3-Clause. https://github.com/lincolnloop/python-qrcode
+
+FFmpeg (no viene en el instalador)
+  Si el equipo no lo tiene, Geas descarga la compilación "essentials" de gyan.dev
+  (https://www.gyan.dev/ffmpeg/builds/, copia en https://github.com/GyanD/codexffmpeg)
+  y la guarda en la carpeta ffmpeg del programa. Licencia: GPL-3.0; su código fuente
+  está en https://ffmpeg.org/ y en las páginas anteriores.

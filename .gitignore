@@ -10,6 +10,9 @@ download_history.json.tmp
 *.log
 *.log.*
 
+# ffmpeg que descarga Geas al usarse desde el código
+ffmpeg/
+
 # Clave privada y paquetes de la extensión: la .pem nunca se publica
 *.pem
 *.crx

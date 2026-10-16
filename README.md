@@ -52,7 +52,7 @@
 - **Sistema Operativo**: Windows 10/11, Linux, macOS
 - **Python**: 3.7 o superior
 - **Navegador**: Google Chrome o Chromium (para la extensión)
-- **FFmpeg**: Recomendado. Sin él, los videos HLS no se reempaquetan (se traban al adelantar) ni se convierten a H.264. En Windows: `winget install --id Gyan.FFmpeg.Essentials -e`
+- **FFmpeg**: Geas instalada lo descarga sola la primera vez (unos 115 MB). Sin él, los videos HLS no se reempaquetan (se traban al adelantar) ni se convierten a H.264.
 
 ## Instalación
 
@@ -60,7 +60,7 @@
 
 Ejecuta `Geas-Setup-<versión>.exe`. Se instala para tu usuario (no pide permisos de administrador) en `%LOCALAPPDATA%\Programs\Geas`, registra la conexión con Chrome, Edge y Firefox, y guarda tus datos (opciones, historial, registro) en `%APPDATA%\Geas`. No hace falta instalar Python. Windows puede mostrar "Windows protegió tu PC" porque el instalador no está firmado: "Más información" → "Ejecutar de todas formas".
 
-La primera vez se abre **Primeros pasos**: explica cómo cargar la extensión (viene en la carpeta `extension` de la instalación) y ofrece instalar ffmpeg.
+La primera vez se abre **Primeros pasos**: detecta tu navegador predeterminado (Chrome, Edge, Brave, Opera, Vivaldi o Firefox) y muestra los pasos para cargar la extensión (viene en la carpeta `extension` de la instalación). Mientras tanto Geas descarga ffmpeg en segundo plano, con su SHA-256 comprobado.
 
 Geas instalada actualiza yt-dlp desde **Ayuda → Actualizar yt-dlp** y, si `UPDATE_REPO` de `version.py` apunta al repositorio de GitHub, busca versiones nuevas de sí misma una vez al día.
 
@@ -103,9 +103,10 @@ pip install -r requirements.txt
 
 ### 4. Instalar FFmpeg (Opcional)
 
-**Windows:**
-- Descarga desde [ffmpeg.org](https://ffmpeg.org/download.html)
-- Agrega FFmpeg a tu PATH
+**Windows:** Geas lo descarga sola al abrirse si no lo encuentra (en la carpeta `ffmpeg` del proyecto). También sirve uno instalado a mano:
+```bash
+winget install --id Gyan.FFmpeg.Essentials -e
+```
 
 **Linux (Ubuntu/Debian):**
 ```bash

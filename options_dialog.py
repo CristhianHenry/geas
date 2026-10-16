@@ -258,11 +258,10 @@ class OptionsDialog(QDialog):
             path.setCursorPosition(0)
             layout.addWidget(path)
         else:
-            status = QLabel("ffmpeg no está instalado: sin él los videos no se reempaquetan ni se convierten.\n"
-                            "Instálalo con:  winget install --id Gyan.FFmpeg.Essentials -e")
+            status = QLabel("ffmpeg todavía no está: Geas lo descarga sola (el avance se ve abajo a la derecha). "
+                            "Sin él los videos no se reempaquetan ni se convierten.")
             status.setObjectName("Warning")
             status.setWordWrap(True)
-            status.setTextInteractionFlags(Qt.TextSelectableByMouse)
             layout.addWidget(status)
 
         layout.addSpacing(8)
