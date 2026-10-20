@@ -4,9 +4,12 @@ import os
 
 import paths
 
+CONFIG_VERSION = 2  # sube cuando un valor por defecto cambia también para las configuraciones guardadas
+
 DEFAULT_CONFIG = {
+    "config_version": CONFIG_VERSION,
     "default_download_folder": os.path.expanduser("~/Downloads"),
-    "default_threads": 4,
+    "default_threads": 8,           # conexiones por descarga (y fragmentos de video a la vez), como IDM
     "category_folders": False,      # cada tipo de archivo en su subcarpeta (Video, Música...), como IDM
     "max_simultaneous_downloads": 3,  # las demás esperan en la cola
     "download_speed_limit_kbps": 0,  # 0 = sin límite
@@ -49,7 +52,8 @@ class AppSettings:
             try:
                 with open(CONFIG_PATH, "r", encoding='utf-8') as f:
                     self._config = json.load(f)
-                
+                self._migrate()
+
                 # Asegurar claves nuevas
                 for key, val in DEFAULT_CONFIG.items():
                     self._config.setdefault(key, val)
@@ -73,6 +77,13 @@ class AppSettings:
                 # Si hay error, usar configuración por defecto
                 self._config = DEFAULT_CONFIG.copy()
                 self._save()
+
+    def _migrate(self):
+        """Lleva a las configuraciones guardadas los valores por defecto que cambiaron."""
+        version = self._config.get("config_version", 1)
+        if version < 2 and self._config.get("default_threads") == 4:
+            self._config["default_threads"] = 8  # antes 4: con 8, como IDM, rinden más los servidores lentos
+        self._config["config_version"] = CONFIG_VERSION
 
     def _save(self):
         """Guardar configuración en archivo JSON"""

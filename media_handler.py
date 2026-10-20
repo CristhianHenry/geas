@@ -105,6 +105,11 @@ def _registry_path_dirs() -> List[str]:
     return dirs
 
 
+# Fragmentos que se bajan a la vez en los videos HLS/DASH (los que llegan en pedacitos):
+# Geas lo iguala a las conexiones por descarga de Opciones
+fragment_connections = 8
+
+
 def find_ffmpeg() -> Optional[str]:
     """
     Carpeta donde está ffmpeg, o None. Además del PATH del proceso (cuando el
@@ -760,6 +765,9 @@ class MediaHandler:
             # Como en la línea de comandos de yt-dlp (usado como librería no reintenta nada)
             'retries': 10,
             'fragment_retries': 10,
+            # Varios fragmentos a la vez, como las conexiones de IDM: los servidores que
+            # limitan cada conexión entregan el video varias veces más rápido
+            'concurrent_fragment_downloads': max(1, fragment_connections),
             # Opciones para asegurar mejor compatibilidad
             'merge_output_format': 'mp4',  # Preferir MP4 al mezclar
         }

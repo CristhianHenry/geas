@@ -34,7 +34,7 @@ class Scheduler:
                     task.status = "iniciada"
             time.sleep(1)
 
-    def add_task(self, url, output_path, start_time, threads=4):
+    def add_task(self, url, output_path, start_time, threads=8):
         task = ScheduledDownload(url, output_path, start_time, threads)
         self.tasks.append(task)
         return task.id

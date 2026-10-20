@@ -22,6 +22,7 @@ import secure_store
 import power_actions
 import theme
 import video_converter
+import media_handler
 import ytdlp_updater
 from ytdlp_dialog import YtDlpUpdateDialog, VersionCheckThread
 import app_updater
@@ -176,6 +177,7 @@ class DownloadApp(QMainWindow):
             self.app_settings = AppSettings()
             network.apply_settings(self.app_settings)  # proxy y usuarios por sitio, antes de cualquier conexión
             video_converter.use_hardware = self.app_settings.get("hardware_encoding")
+            media_handler.fragment_connections = self.app_settings.get("default_threads")
             self.manager = DownloadManager(max_active=self.app_settings.get("max_simultaneous_downloads"))
             self.scheduler = Scheduler(self.manager)
             self.ffmpeg_setup = FfmpegSetup(self)  # si falta ffmpeg, Geas lo descarga sola
@@ -953,6 +955,7 @@ class DownloadApp(QMainWindow):
             self.apply_stylesheet()  # por si cambió el tema
             network.apply_settings(self.app_settings)
             video_converter.use_hardware = self.app_settings.get("hardware_encoding")
+            media_handler.fragment_connections = self.app_settings.get("default_threads")
             self.toggle_clipboard_monitor(self.app_settings.get("clipboard_monitor"))
             self._update_ffmpeg_label()
             self.log_message("Opciones actualizadas")

@@ -101,8 +101,9 @@ class OptionsDialog(QDialog):
         form.addRow("Conexiones por descarga:", self.threads)
         form.addRow("Límite de velocidad:", self.speed_limit)
         form.addRow("Reintentos si falla la conexión:", self.retries)
-        hint = QLabel("Más conexiones aceleran las descargas en servidores que lo permiten. "
-                      "Si un servidor falla con muchas, prueba con 1.")
+        self.threads.setToolTip("También es cuántos pedacitos de un video se bajan a la vez")
+        hint = QLabel("Muchos servidores limitan la velocidad de cada conexión: con varias, el archivo o video "
+                      "baja en paralelo y más rápido (IDM usa 8). Si un servidor falla con muchas, prueba con 1.")
         hint.setObjectName("Hint")
         hint.setWordWrap(True)
         form.addRow(hint)

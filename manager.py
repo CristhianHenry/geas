@@ -365,7 +365,7 @@ class DownloadManager:
     # Descargas
     # ------------------------------------------------------------------
 
-    def add_download(self, url, output_file, threads=4, speed_limit_kbps=0, headers=None, cookies=None,
+    def add_download(self, url, output_file, threads=8, speed_limit_kbps=0, headers=None, cookies=None,
                      start=True, max_retries=3):
         task = DownloadTask(url, output_file, threads, speed_limit_kbps, self, headers=headers, cookies=cookies,
                             max_retries=max_retries)
@@ -471,7 +471,7 @@ class DownloadManager:
             return False
         return entry.get("kind") == "file" or (entry.get("kind") == "video" and bool(entry.get("video")))
 
-    def resume_entry(self, entry_id, threads=4, speed_limit_kbps=0, max_retries=3, front=True):
+    def resume_entry(self, entry_id, threads=8, speed_limit_kbps=0, max_retries=3, front=True):
         """
         Continúa una descarga que quedó a medias (al cerrar Geas, por un error o
         cancelada) desde lo ya descargado, con las cookies y cabeceras con que
