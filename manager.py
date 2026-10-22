@@ -13,7 +13,7 @@ import video_converter
 from browser_context import BrowserContext
 from history import DownloadHistory
 from enhanced_downloader import EnhancedDownloadTask as DownloadWorker
-from media_handler import MediaHandler
+from media_handler import MediaHandler, remove_temp
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +274,8 @@ class YtDownloadTask:
             # yt-dlp no cierra su .part al interrumpirlo (queda en el rastro del error) y Windows
             # no dejaría renombrarlo al reanudar en esta misma sesión: se libera ya
             gc.collect()
+            if not self._paused:
+                remove_temp(self.output_path)  # cancelada: sus pedacitos ya no sirven (pausada: se conservan)
         self.manager.fill_slots()  # terminó, falló o se pausó: su lugar queda libre
 
     def pause(self):

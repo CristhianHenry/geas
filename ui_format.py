@@ -72,6 +72,7 @@ _ERRORS = [
     ("members-only", "El video es solo para miembros del canal"),
     ("Requested format is not available", "Esa calidad ya no está disponible: vuelve a elegirla"),
     ("Unsupported URL", "Geas no reconoce videos en ese sitio"),
+    ("unable to continue", "El sitio dejó de entregar una parte del video: pulsa Reanudar para seguir desde donde quedó"),
     ("ffmpeg", "Falta ffmpeg para unir el video y el audio (Opciones → Video)"),
     ("espacio insuficiente", "No hay espacio suficiente en el disco"),
     ("401", "El sitio pide usuario y contraseña: agrégalos en Opciones → Proxy y sitios"),
@@ -80,6 +81,8 @@ _ERRORS = [
     ("410", "El enlace venció: usa Actualizar dirección de descarga"),
     ("416", "El servidor no deja continuar desde donde quedó: descárgalo de nuevo"),
     ("429", "El sitio está limitando las descargas: espera unos minutos y reanuda"),
+    ("502", "El servidor del sitio está saturado o caído: espera un rato y reanuda"),
+    ("503", "El servidor del sitio está saturado o caído: espera un rato y reanuda"),
     ("NameResolution", "Sin conexión a internet, o el sitio no existe"),
     ("getaddrinfo", "Sin conexión a internet, o el sitio no existe"),
     ("Failed to resolve", "Sin conexión a internet, o el sitio no existe"),
@@ -97,8 +100,9 @@ def friendly_error(detail):
     detail = detail or ""
     for needle, text in _ERRORS:
         if needle.isdigit():
-            # Códigos HTTP: "403" suelto o "HTTP Error 403" / "403 Client Error", no dentro de otro número
-            if re.search(rf"(?<!\d){needle}(?!\d)", detail):
+            # Códigos HTTP: "403" suelto o "HTTP Error 403" / "403 Client Error"; no dentro de otro
+            # número ni el número de un pedacito ("fragment 416 not found" no es un error 416)
+            if re.search(rf"(?<!\d)(?<!fragment )(?<!Frag){needle}(?!\d)", detail, re.IGNORECASE):
                 return text
         elif needle.lower() in detail.lower():
             return text

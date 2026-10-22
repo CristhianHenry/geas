@@ -1,9 +1,13 @@
+import ast
 import functools
+import gc
 import glob
+import hashlib
 import logging
 import os
 import re
 import shutil
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -24,6 +28,15 @@ MAX_STREAM_CANDIDATES = 4
 
 VIDEO_URL_PATTERN = re.compile(r'https?://[^\s"\'<>\\]+\.(?:mp4|m3u8|webm|mpd)(?:\?[^\s"\'<>\\]*)?', re.IGNORECASE)
 HTTP_ERROR_PATTERN = re.compile(r"HTTP Error \d{3}: [^.\n]*")
+# yt-dlp retoma un pedacito cortado a medias pidiendo "desde el byte X"; si el servidor responde
+# 416, su segundo intento "sin rango" sigue llevando el rango (yt-dlp 2026.02) y repite el error
+RANGE_REFUSED_PATTERN = re.compile(r"HTTP Error 416\b.*Retrying fragment (\d+)")
+MAX_RECOVERIES = 2  # veces que una descarga caída a mitad de camino sigue sola desde donde quedó
+# Al terminar, yt-dlp renombra el .part; si el antivirus lo tiene abierto, falla. Para entonces ya
+# borró su marca de "por dónde voy": repetir la descarga pegaría el video dos veces en el .part
+FILE_ACCESS_RETRIES = 10
+RENAME_FAILED_PATTERN = re.compile(
+    r"""Unable to rename file: .*?((['"])(?:\\.|(?!\2).)*\2) -> ((['"])(?:\\.|(?!\4).)*\4)""")
 # Errores con los que vale la pena reintentar con otras cabeceras
 ACCESS_DENIED_MARKERS = ("HTTP Error 401", "HTTP Error 403", "HTTP Error 404", "downloaded file is empty")
 # Cómo pide los fragmentos un reproductor. yt-dlp por defecto se presenta como una
@@ -43,9 +56,12 @@ class _YdlLogger:
     mensajes de pantalla, no como avisos).
     """
 
-    def __init__(self):
+    def __init__(self, on_error=None, on_range_refused=None):
         self.http_error = ""
         self.needs_ffmpeg = False  # yt-dlp no pudo reempaquetar el video (sin ffmpeg)
+        self.on_error = on_error   # yt-dlp dio la descarga por fallida
+        self.on_range_refused = on_range_refused  # el servidor no deja retomar un pedacito (n.º)
+        self.last_error = ""
 
     def _remember(self, msg):
         if "Install ffmpeg" in msg or "ffmpeg not found" in msg:
@@ -65,10 +81,16 @@ class _YdlLogger:
     def warning(self, msg):
         self._remember(msg)
         logger.warning(f"yt-dlp: {msg}")
+        refused = RANGE_REFUSED_PATTERN.search(msg)
+        if refused and self.on_range_refused:
+            self.on_range_refused(int(refused.group(1)))
 
     def error(self, msg):
         self._remember(msg)
         logger.error(f"yt-dlp: {msg}")
+        self.last_error = msg
+        if self.on_error:
+            self.on_error()
 
 
 @dataclass
@@ -108,6 +130,149 @@ def _registry_path_dirs() -> List[str]:
 # Fragmentos que se bajan a la vez en los videos HLS/DASH (los que llegan en pedacitos):
 # Geas lo iguala a las conexiones por descarga de Opciones
 fragment_connections = 8
+
+# Los .part y los pedacitos de cada video van a una carpeta oculta junto a su destino (en el
+# mismo disco: el video terminado se mueve al instante), nunca sueltos en la carpeta de descargas
+TEMP_FOLDER = ".geas-temp"
+
+
+def _guard_resume_state() -> bool:
+    """
+    yt-dlp (2026.02) bajando varios pedacitos a la vez: cada conexión que termina uno anota cuántos
+    lleva en el estado compartido, y a veces eso pisa la marca de "hasta dónde se pegó" justo cuando
+    se guarda en el .ytdl. Al seguir tras una pausa o un corte se saltaba un pedacito y el video
+    quedaba sin unos segundos. Aquí se guarda el número del pedacito que de verdad se acaba de pegar
+    (va en el nombre de su archivo). False si yt-dlp cambió por dentro: entonces se baja de a uno.
+    """
+    try:
+        from yt_dlp.downloader.fragment import FragmentFD
+        original = FragmentFD._write_ytdl_file
+        append_code = FragmentFD._append_fragment.__code__
+    except (ImportError, AttributeError):
+        return False
+    if getattr(original, "_geas", False):
+        return True
+    if "fragment_filename_sanitized" not in append_code.co_consts or "_write_ytdl_file" not in append_code.co_names:
+        return False
+
+    def _write_ytdl_file(self, ctx):
+        appended = re.search(r"-Frag(\d+)$", ctx.get("fragment_filename_sanitized") or "")
+        if appended:
+            ctx = {**ctx, "fragment_index": int(appended.group(1))}  # copia: las conexiones no la pisan
+        return original(self, ctx)
+
+    _write_ytdl_file._geas = True
+    FragmentFD._write_ytdl_file = _write_ytdl_file
+    return True
+
+
+RESUME_STATE_GUARDED = _guard_resume_state()
+
+
+def _retry_sleep(n):
+    """Espera antes de cada reintento (1, 2, 4, 8 y luego 10 s): un servidor saturado se recupera."""
+    return min(2 ** n, 10)
+
+
+def temp_dir_for(output_path: str) -> str:
+    output_path = os.path.abspath(output_path)
+    key = hashlib.sha1(os.path.normcase(output_path).encode("utf-8")).hexdigest()[:12]
+    return os.path.join(os.path.dirname(output_path), TEMP_FOLDER, key)
+
+
+def _make_temp_dir(output_path: str) -> str:
+    folder = temp_dir_for(output_path)
+    os.makedirs(folder, exist_ok=True)
+    if os.name == "nt":
+        import ctypes
+        ctypes.windll.kernel32.SetFileAttributesW(os.path.dirname(folder), 0x2)  # oculta
+    return folder
+
+
+def _remove_files(paths_to_remove) -> bool:
+    removed = True
+    for path in paths_to_remove:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            removed = False  # en uso
+    return removed
+
+
+def _old_leftovers(output_path: str) -> List[str]:
+    """Restos de versiones anteriores de Geas, sueltos junto al video: pedacitos y estado de yt-dlp."""
+    stem = glob.escape(os.path.splitext(os.path.abspath(output_path))[0])
+    return glob.glob(stem + ".*.part-Frag*") + glob.glob(stem + ".*.ytdl")
+
+
+def _adopt_old_download(output_path: str, temp_dir: str):
+    """
+    Una descarga a medias de una versión anterior (sus .part y .ytdl junto al video) pasa a la
+    carpeta oculta para seguir desde donde quedó; sus pedacitos sueltos se borran.
+    """
+    stem = os.path.splitext(os.path.abspath(output_path))[0]
+    state_files = glob.glob(glob.escape(stem) + ".*.part") + glob.glob(glob.escape(stem) + ".*.ytdl")
+    fragments = glob.glob(glob.escape(stem) + ".*.part-Frag*")
+    if len(fragments) > 1:
+        # La dejó la versión 1.0.1 con varias conexiones: su marca de "hasta dónde" puede estar
+        # adelantada (ver _guard_resume_state) y el video quedaría con un hueco. Empieza de cero
+        _remove_files(state_files + fragments)
+        return
+    for path in state_files:
+        target = os.path.join(temp_dir, os.path.basename(path))
+        if not os.path.exists(target):
+            try:
+                os.replace(path, target)
+            except OSError:
+                pass
+    _remove_files(fragments)
+
+
+def _failed_rename(message: str) -> Optional[Tuple[str, str]]:
+    """(origen, destino) si yt-dlp falló solo al renombrar el archivo terminado."""
+    match = RENAME_FAILED_PATTERN.search(message)
+    if not match:
+        return None
+    try:
+        return ast.literal_eval(match.group(1)), ast.literal_eval(match.group(3))
+    except (ValueError, SyntaxError):
+        return None
+
+
+def _replace_when_free(source: str, target: str, attempts: int = 20) -> bool:
+    for attempt in range(attempts):
+        try:
+            os.replace(source, target)
+            return True
+        except FileNotFoundError:
+            return os.path.exists(target)
+        except OSError:
+            time.sleep(0.5)  # sigue abierto (antivirus, indexador de Windows)
+    return False
+
+
+def _drop_fragments(output_path: str, index: Optional[int] = None):
+    """
+    Pedacitos guardados aparte en la carpeta oculta (todos, o la parte a medias de uno). yt-dlp
+    no los reutiliza al seguir una descarga, y retomar uno a medias puede fallar con 416.
+    """
+    folder = glob.escape(temp_dir_for(output_path))
+    pattern = f"*-Frag{index}.part" if index is not None else "*-Frag*"
+    _remove_files(glob.glob(os.path.join(folder, pattern)))
+
+
+def remove_temp(output_path: str) -> bool:
+    """Borra los restos de una descarga de video. False si algo sigue en uso (yt-dlp aún no lo suelta)."""
+    folder = temp_dir_for(output_path)
+    shutil.rmtree(folder, ignore_errors=True)
+    try:
+        os.rmdir(os.path.dirname(folder))  # .geas-temp, si no quedan otras descargas a medias
+    except OSError:
+        pass
+    old_removed = _remove_files(_old_leftovers(output_path))
+    return not os.path.exists(folder) and old_removed
 
 
 def find_ffmpeg() -> Optional[str]:
@@ -720,11 +885,31 @@ class MediaHandler:
         headers = source.get('headers') or (context.http_headers() if context else None)
         cookie_context = context if context and source.get('use_cookies', True) else None
 
+        output_path = os.path.abspath(output_path)
+        temp_dir = _make_temp_dir(output_path)
+        _adopt_old_download(output_path, temp_dir)
+        if os.listdir(temp_dir):
+            gc.collect()  # sigue una pausa de esta misma sesión: que se suelte su .part si quedó abierto
+        # failed: yt-dlp ya dio la descarga por fallida; progressed: bajó algo nuevo en este intento
+        run = {"failed": False, "progressed": False, "start_bytes": None}
+
+        def retry_sleep(n):
+            return 0 if run["failed"] else _retry_sleep(n)  # ya fallida: sin esperas, que termine pronto
+
         # Configurar hooks para progreso
         def progress_hook(d):
             # Verificar cancelación
             if check_cancelled_cb and check_cancelled_cb():
                 raise Exception("DownloadCancelled")
+            if run["failed"]:
+                # Con varios pedacitos a la vez, yt-dlp termina de bajar todos los que ya repartió
+                # antes de rendirse: se cortan aquí, sin seguir gastando conexión en un video fallido
+                raise Exception("DownloadAborted")
+            downloaded = d.get('downloaded_bytes') or 0
+            if run["start_bytes"] is None:
+                run["start_bytes"] = downloaded  # lo que ya estaba bajado al seguir una descarga
+            elif downloaded > run["start_bytes"]:
+                run["progressed"] = True
             if progress_info_callback:
                 progress_info_callback(d)
 
@@ -754,7 +939,9 @@ class MediaHandler:
         # Opciones de descarga
         ydl_opts = {
             'format': format_id,
-            'outtmpl': output_path,  # yt-dlp añadirá la extensión si falta
+            'outtmpl': os.path.basename(output_path),  # yt-dlp añadirá la extensión si falta
+            # El video terminado queda en su carpeta; lo intermedio (.part, pedacitos), en una oculta
+            'paths': {'home': os.path.dirname(output_path), 'temp': temp_dir},
             'progress_hooks': [progress_hook],
             'quiet': True,
             'no_warnings': False,
@@ -765,9 +952,11 @@ class MediaHandler:
             # Como en la línea de comandos de yt-dlp (usado como librería no reintenta nada)
             'retries': 10,
             'fragment_retries': 10,
+            'retry_sleep_functions': {'http': retry_sleep, 'fragment': retry_sleep, 'file_access': lambda n: 1},
+            'file_access_retries': FILE_ACCESS_RETRIES,
             # Varios fragmentos a la vez, como las conexiones de IDM: los servidores que
             # limitan cada conexión entregan el video varias veces más rápido
-            'concurrent_fragment_downloads': max(1, fragment_connections),
+            'concurrent_fragment_downloads': max(1, fragment_connections) if RESUME_STATE_GUARDED else 1,
             # Opciones para asegurar mejor compatibilidad
             'merge_output_format': 'mp4',  # Preferir MP4 al mezclar
         }
@@ -801,7 +990,8 @@ class MediaHandler:
         variants = self._download_variants(url, headers, download_headers, is_stream, source.get('impersonate', False))
         for attempt, (attempt_headers, impersonate) in enumerate(variants, 1):
             # Avisos y errores (reintentos de fragmentos, HTTP 403...) van a geas.log
-            ydl_logger = _YdlLogger()
+            ydl_logger = _YdlLogger(on_error=lambda: run.update(failed=True),
+                                    on_range_refused=lambda index: _drop_fragments(output_path, index))
             ydl_opts['logger'] = ydl_logger
             if attempt_headers:
                 ydl_opts['http_headers'] = attempt_headers
@@ -812,11 +1002,8 @@ class MediaHandler:
             self.logger.info(f"Descarga intento {attempt}/{len(variants)}{' imitando a Chrome' if impersonate else ''}: "
                              f"{self._describe_headers(attempt_headers or {})}")
             try:
-                with (cookie_context.cookie_file() if cookie_context else nullcontext()) as cookiefile:
-                    if cookiefile:
-                        ydl_opts['cookiefile'] = cookiefile
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
+                self._download_with_recovery(url, ydl_opts, cookie_context, output_path, run, check_cancelled_cb)
+                remove_temp(output_path)
                 if ydl_logger.needs_ffmpeg:
                     self.notice = "sin ffmpeg: puede trabarse al adelantar"
                 return True
@@ -825,6 +1012,10 @@ class MediaHandler:
                 error_msg = str(e)
                 if error_msg == "DownloadCancelled":
                     raise
+                if error_msg == "DownloadAborted":
+                    # Un pedacito cortado llegó antes que el error real: se informa el de yt-dlp
+                    error_msg = ydl_logger.last_error or "la descarga del video falló"
+                    e = Exception(error_msg)
 
                 denied = any(marker in f"{error_msg} {ydl_logger.http_error}" for marker in ACCESS_DENIED_MARKERS)
                 if denied and attempt < len(variants):
@@ -862,6 +1053,46 @@ class MediaHandler:
                 if status_callback:
                     status_callback(f"Error: {str(e)}")
                 raise e
+
+    @staticmethod
+    def _run_ydl(url: str, ydl_opts: Dict, cookie_context: Optional[BrowserContext]):
+        with (cookie_context.cookie_file() if cookie_context else nullcontext()) as cookiefile:
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+    def _download_with_recovery(self, url: str, ydl_opts: Dict, cookie_context: Optional[BrowserContext],
+                                output_path: str, run: Dict, check_cancelled_cb: Optional[Callable]):
+        """
+        Si la descarga se cae a mitad de camino, sigue sola desde donde quedó (hasta MAX_RECOVERIES
+        veces): con una sola conexión, porque hay servidores que no aguantan varias, y sin los
+        pedacitos a medias, que yt-dlp no logra retomar si el servidor responde 416.
+        """
+        for recovery in range(MAX_RECOVERIES + 1):
+            _drop_fragments(output_path)
+            run.update(failed=False, progressed=False, start_bytes=None)
+            try:
+                self._run_ydl(url, ydl_opts, cookie_context)
+                return
+            except Exception as e:
+                cancelled = str(e) == "DownloadCancelled" or (check_cancelled_cb and check_cancelled_cb())
+                rename = _failed_rename(str(e))
+                if cancelled or recovery == MAX_RECOVERIES or not (run["progressed"] or rename):
+                    raise
+                failure = str(e)
+                self.logger.warning(f"La descarga se cortó a mitad de camino ({e}); sigue desde donde quedó"
+                                    + ("" if rename else " con una sola conexión"))
+            # yt-dlp deja abierto el .part del intento fallido y Windows no dejaría terminarlo. Se libera
+            # fuera del except: mientras existe, el error guarda una referencia a ese archivo abierto
+            gc.collect()
+            if rename:
+                # Ya estaba todo bajado: se termina el cambio de nombre y yt-dlp solo hace lo que falta
+                # (unir, mover). Volver a bajar pegaría el video dos veces
+                if not _replace_when_free(*rename):
+                    raise Exception(failure)
+            else:
+                ydl_opts['concurrent_fragment_downloads'] = 1
 
     @staticmethod
     def _download_variants(url: str, headers: Optional[Dict], download_headers: Optional[Dict] = None,

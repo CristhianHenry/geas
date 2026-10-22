@@ -833,6 +833,8 @@ class DownloadApp(QMainWindow):
                 dialog_window.close()
             if delete_files and path:
                 self._delete_file(path)
+            if path:
+                self._delete_temp(path)
         self.manager.history.remove_entries(ids)
         self.log_message(f"Eliminadas {len(ids)} descargas de la lista")
         self.refresh_list()
@@ -850,6 +852,11 @@ class DownloadApp(QMainWindow):
             QTimer.singleShot(1000, lambda: self._delete_file(path, attempts - 1))
         elif pending:
             self.log_message(f"No se pudo borrar {path}: está en uso")
+
+    def _delete_temp(self, path, attempts=4):
+        """Restos de un video a medias (.part y pedacitos en su carpeta oculta): sin la descarga no sirven."""
+        if not media_handler.remove_temp(path) and attempts > 1:
+            QTimer.singleShot(1000, lambda: self._delete_temp(path, attempts - 1))
 
     def delete_completed(self):
         ids = [entry_id for entry_id in self.items if self._status_of(entry_id).startswith("completado")]
