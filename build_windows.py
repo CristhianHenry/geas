@@ -92,10 +92,22 @@ def duplicate_definitions():
     return found
 
 
+def unsafe_python():
+    """
+    Python 3.14.0 a 3.14.4 traen un recolector de memoria incremental que cerraba Geas de golpe
+    (acceso inválido en mark_stacks, con varios hilos bajando pedacitos). Desde la 3.14.5 se volvió
+    al recolector de la 3.13. Geas lleva dentro el Python con el que se arma.
+    """
+    return (3, 14, 0) <= sys.version_info[:3] <= (3, 14, 4)
+
+
 def main():
     duplicates = duplicate_definitions()
     if duplicates:
         sys.exit("No se arma Geas: hay funciones definidas dos veces\n  " + "\n  ".join(duplicates))
+    if unsafe_python():
+        sys.exit(f"No se arma Geas con Python {sys.version.split()[0]}: entre 3.14.0 y 3.14.4 cierra Geas de "
+                 f"golpe al bajar videos en pedacitos. Instala Python 3.14.5 o posterior y vuelve a armar.")
     write_version_info()
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
                     "--distpath", str(DIST), "--workpath", str(BUILD / "pyinstaller"), "geas.spec"],

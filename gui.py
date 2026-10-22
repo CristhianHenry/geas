@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QToolBar, QMenu, QMessageBox, QDialog, QLabel,
     QSystemTrayIcon, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
-from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess, QEvent
+from PySide6.QtCore import QTimer, QObject, Signal, Qt, QSize, QRect, QProcess, QEvent, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QLinearGradient, QKeySequence, QBrush
 
 import icons
@@ -151,6 +151,9 @@ class DownloadApp(QMainWindow):
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                             handlers=log_handlers)
         self.logger = logging.getLogger(__name__)
+        # Con qué se armó esta copia: ante un cierre de golpe, lo primero es saber la versión de Python
+        self.logger.info(f"Geas {__version__} iniciada (Python {sys.version.split()[0]}, Qt {qVersion()}, "
+                         f"yt-dlp {ytdlp_updater.installed_version() or '?'})")
 
         self.items = {}               # id de descarga -> fila de la lista
         self.dialogs = {}             # id de descarga -> ventana de progreso

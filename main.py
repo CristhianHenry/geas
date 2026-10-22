@@ -1,9 +1,21 @@
 #main.py
+import faulthandler
 import os
 import sys
+from datetime import datetime
 
 import paths
 import ytdlp_updater
+from version import __version__
+
+# Si Geas muere por un fallo nativo (Python, Qt), geas.log no alcanza a registrar nada: faulthandler
+# deja en crash.log la pila de Python de cada hilo. El archivo debe quedar abierto mientras Geas viva.
+_crash_log_path = paths.data("crash.log")
+_crash_log_big = os.path.exists(_crash_log_path) and os.path.getsize(_crash_log_path) > 1_000_000
+_crash_log = open(_crash_log_path, "w" if _crash_log_big else "a", encoding="utf-8")
+_crash_log.write(f"--- Geas {__version__}, Python {sys.version.split()[0]}, {datetime.now():%Y-%m-%d %H:%M:%S}\n")
+_crash_log.flush()
+faulthandler.enable(file=_crash_log, all_threads=True)
 
 # Los archivos relativos se buscan en la carpeta de datos, aunque lo inicie el
 # navegador o un acceso directo desde otra carpeta
