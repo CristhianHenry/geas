@@ -4,9 +4,13 @@ import os
 import sys
 from datetime import datetime
 
+import network
 import paths
 import ytdlp_updater
 from version import __version__
+
+# Antes de cualquier conexión: Geas confía solo en sus certificados (certifi), no en listas ajenas
+network.pin_trust_store()
 
 # Si Geas muere por un fallo nativo (Python, Qt), geas.log no alcanza a registrar nada: faulthandler
 # deja en crash.log la pila de Python de cada hilo. El archivo debe quedar abierto mientras Geas viva.

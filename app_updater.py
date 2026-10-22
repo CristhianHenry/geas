@@ -14,6 +14,7 @@ import sys
 import tempfile
 import urllib.request
 
+import network
 import paths
 from version import __version__, UPDATE_REPO
 from ytdlp_updater import is_newer
@@ -28,7 +29,7 @@ def enabled():
 
 def _open(url, timeout):
     request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Geas"})
-    return urllib.request.urlopen(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout, context=network.ssl_context())
 
 
 def latest_release(timeout=10):

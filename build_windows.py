@@ -101,7 +101,25 @@ def unsafe_python():
     return (3, 14, 0) <= sys.version_info[:3] <= (3, 14, 4)
 
 
+MIN_CERTIFI = (2026, 10, 19)
+
+
+def outdated_certifi():
+    """
+    Versión de certifi si es anterior a 2026.10.19, o None. Las anteriores confían en la raíz
+    emSign ECC Root CA - G3, cuyas CA intermedias tienen la clave filtrada (cualquiera puede
+    falsificar una web). Geas lleva dentro el certifi con el que se arma.
+    """
+    import certifi
+    version = tuple(int(part) for part in certifi.__version__.split("."))
+    return None if version >= MIN_CERTIFI else certifi.__version__
+
+
 def main():
+    old_certifi = outdated_certifi()
+    if old_certifi:
+        sys.exit(f"No se arma Geas con certifi {old_certifi}: confía en las CA filtradas de eMudhra. "
+                 f"Actualízalo:  python -m pip install -U \"certifi>=2026.10.19\"")
     duplicates = duplicate_definitions()
     if duplicates:
         sys.exit("No se arma Geas: hay funciones definidas dos veces\n  " + "\n  ".join(duplicates))

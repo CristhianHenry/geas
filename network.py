@@ -4,9 +4,16 @@ El proxy se aplica con las variables de entorno que requests, yt-dlp y urllib
 leen en cada conexión: así vale para las descargas, el análisis de videos y la
 comprobación de versiones a la vez, y un cambio en Opciones rige desde la
 siguiente conexión.
+
+Certificados: todas las conexiones de Geas confían solo en los de certifi, que se
+actualiza con cada versión de Geas (en octubre de 2026 quitó la raíz de eMudhra,
+cuyas CA intermedias filtradas permiten falsificar cualquier web).
 """
 import os
+import ssl
 from urllib.parse import urlparse
+
+import certifi
 
 PROXY_SYSTEM, PROXY_NONE, PROXY_MANUAL = "sistema", "ninguno", "manual"
 
@@ -15,6 +22,26 @@ _original_env = {key: os.environ.get(key) for key in _PROXY_VARS}  # las de Wind
 _mode = PROXY_SYSTEM
 _proxy_url = ""
 _logins = []  # [(sitio, usuario, contraseña)]
+
+
+# Con estas variables otros programas (PostgreSQL, curl...) cambian la lista de certificados en que
+# confían requests y Python, a veces por una vieja: en esta PC, una de PostgreSQL de 2024
+_FOREIGN_CA_VARS = ("REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR")
+
+
+def pin_trust_store():
+    """Al abrir Geas: que requests use certifi y no una lista ajena puesta en el entorno (solo en Geas)."""
+    for key in _FOREIGN_CA_VARS:
+        os.environ.pop(key, None)
+
+
+def ssl_context():
+    """
+    Para las conexiones con urllib (actualizar Geas y yt-dlp, bajar ffmpeg: código que luego se
+    ejecuta). El contexto por defecto de Python en Windows toma las raíces del almacén de Windows
+    pero no sus bloqueos, y así aceptaba los certificados falsos de eMudhra por la raíz de Sectigo.
+    """
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def normalize_proxy(url):

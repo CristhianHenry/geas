@@ -24,6 +24,7 @@ import urllib.request
 import zipfile
 from importlib import metadata
 
+import network
 import paths
 
 PYPI_URL = "https://pypi.org/pypi/yt-dlp/json"
@@ -77,7 +78,7 @@ def installed_version():
 
 def _pypi_info(timeout=10):
     request = urllib.request.Request(PYPI_URL, headers={"Accept": "application/json", "User-Agent": "Geas"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=network.ssl_context()) as response:
         return json.load(response)
 
 
@@ -119,7 +120,7 @@ def _download_update(timeout=120):
     if wheel is None:
         return False, f"PyPI no tiene un paquete de yt-dlp {version} para descargar"
     request = urllib.request.Request(wheel["url"], headers={"User-Agent": "Geas"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=network.ssl_context()) as response:
         blob = response.read()
     if hashlib.sha256(blob).hexdigest() != wheel["digests"]["sha256"]:
         return False, "El archivo descargado no coincide con el publicado (SHA-256): no se instaló"

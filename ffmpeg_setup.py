@@ -16,6 +16,7 @@ import zipfile
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+import network
 import paths
 from media_handler import find_ffmpeg
 
@@ -46,7 +47,7 @@ def explain(error):
 
 def _open(url, timeout):
     request = urllib.request.Request(url, headers={"User-Agent": "Geas", "Accept": "application/vnd.github+json"})
-    return urllib.request.urlopen(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout, context=network.ssl_context())
 
 
 def latest_build(timeout=15):

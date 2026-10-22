@@ -15,7 +15,7 @@ flask>=2.0.0
 
 # Utilidades adicionales
 urllib3>=1.26.0
-certifi>=2021.5.30
+certifi>=2026.10.19  # sin la raíz de eMudhra (CA intermedias con clave filtrada, oct-2026)
 
 # Media Downloading
 yt-dlp>=2023.0.0
