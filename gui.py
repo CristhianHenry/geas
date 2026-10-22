@@ -520,9 +520,10 @@ class DownloadApp(QMainWindow):
         item.setData(COL_SIZE, SORT_ROLE, int(total or 0))
 
         item.setText(COL_STATUS, text)
-        # Con error: la explicación y, debajo, el detalle técnico (para buscarlo o reportarlo)
+        # Con error: de qué archivo (el globo puede tapar otras filas), la explicación y, debajo,
+        # el detalle técnico (para buscarlo o reportarlo)
         detail = status[len("error"):].strip(" :") if status.startswith("error") else ""
-        item.setToolTip(COL_STATUS, f"{text}\n\nDetalle: {detail}" if detail else text)
+        item.setToolTip(COL_STATUS, f"{name}\n{text}\n\nDetalle: {detail}" if detail else text)
         item.setData(COL_STATUS, PROGRESS_ROLE, progress)
         item.setData(COL_STATUS, SORT_ROLE, text.lower())
         item.setForeground(COL_STATUS, QBrush(theme.color("#c42b1c" if status.startswith("error") else "#1b1b1b")))

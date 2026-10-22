@@ -79,7 +79,7 @@ _ERRORS = [
     ("403", "El servidor negó el acceso: el enlace pudo vencer (usa Actualizar dirección de descarga)"),
     ("404", "El archivo ya no existe en el servidor"),
     ("410", "El enlace venció: usa Actualizar dirección de descarga"),
-    ("416", "El servidor no deja continuar desde donde quedó: descárgalo de nuevo"),
+    ("416", "El servidor no dejó continuar desde donde quedó: pulsa Reanudar (si vuelve a fallar, descárgalo de nuevo)"),
     ("429", "El sitio está limitando las descargas: espera unos minutos y reanuda"),
     ("502", "El servidor del sitio está saturado o caído: espera un rato y reanuda"),
     ("503", "El servidor del sitio está saturado o caído: espera un rato y reanuda"),
