@@ -1055,7 +1055,7 @@ class MediaHandler:
                 raise e
 
     @staticmethod
-    def _run_ydl(url: str, ydl_opts: Dict, cookie_context: Optional[BrowserContext]):
+    def _ydl_download(url: str, ydl_opts: Dict, cookie_context: Optional[BrowserContext]):
         with (cookie_context.cookie_file() if cookie_context else nullcontext()) as cookiefile:
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
@@ -1073,7 +1073,7 @@ class MediaHandler:
             _drop_fragments(output_path)
             run.update(failed=False, progressed=False, start_bytes=None)
             try:
-                self._run_ydl(url, ydl_opts, cookie_context)
+                self._ydl_download(url, ydl_opts, cookie_context)
                 return
             except Exception as e:
                 cancelled = str(e) == "DownloadCancelled" or (check_cancelled_cb and check_cancelled_cb())

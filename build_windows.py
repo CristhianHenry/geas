@@ -10,6 +10,7 @@ Arma Geas para Windows:
 El instalador registra el host nativo para Chrome, Edge y Firefox con los
 manifiestos que se generan aquí.
 """
+import ast
 import json
 import shutil
 import subprocess
@@ -68,7 +69,33 @@ def find_iscc():
     return next((str(c) for c in candidates if c and Path(c).exists()), None)
 
 
+def duplicate_definitions():
+    """
+    Funciones o métodos definidos dos veces en el mismo archivo o clase: el segundo tapa al primero
+    sin avisar (en la 1.0.2, un _run_ydl nuevo tapó al del análisis y no se encontraba ningún video).
+    """
+    found = []
+    for path in sorted(ROOT.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        scopes = [("", tree.body)] + [(f"{node.name}.", node.body) for node in ast.walk(tree)
+                                      if isinstance(node, ast.ClassDef)]
+        for prefix, body in scopes:
+            seen = {}
+            for node in body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if {getattr(d, "attr", getattr(d, "id", "")) for d in node.decorator_list} & {"setter", "deleter"}:
+                    continue  # propiedades: repetir el nombre es lo normal
+                if node.name in seen:
+                    found.append(f"{path.name}: {prefix}{node.name} (líneas {seen[node.name]} y {node.lineno})")
+                seen[node.name] = node.lineno
+    return found
+
+
 def main():
+    duplicates = duplicate_definitions()
+    if duplicates:
+        sys.exit("No se arma Geas: hay funciones definidas dos veces\n  " + "\n  ".join(duplicates))
     write_version_info()
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
                     "--distpath", str(DIST), "--workpath", str(BUILD / "pyinstaller"), "geas.spec"],
